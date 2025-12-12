@@ -13,6 +13,10 @@ from devgen.utils import (
     load_template_env,
     sanitize_ai_commit_message,
 )
+from rich.console import Console
+from rich.panel import Panel
+from rich.markdown import Markdown
+from rich.theme import Theme
 
 
 class CommitEngineError(Exception):
@@ -45,11 +49,13 @@ class CommitEngine:
         self.provider = provider
         self.model = model
         self.logger = logger or configure_logger(
-            "devgen.commit", Path.home() / ".cache" / "devgen" / "commit.log"
+            "devgen.commit", Path.home() / ".cache" / "devgen" / "commit.log", console=debug
         )
         self.kwargs = kwargs
         self.dry_run_path = get_commit_dry_run_path()
         self.template_env = load_template_env("commit")
+        
+        self.console = Console(theme=Theme({"info": "dim cyan", "warning": "magenta", "danger": "bold red"}))
 
         # Load config from ~/.devgen.yaml
         from devgen.utils import load_config
@@ -117,18 +123,21 @@ class CommitEngine:
         if not files:
             return
         self.logger.info(f"Staging: {files}")
+        self.console.print(f"[info]Staging {len(files)} files...[/info]")
         self._exec_git(["git", "add", *files])
 
     def commit_staged(self, msg: str):
         """Commits staged changes."""
         self.logger.info(f"Committing:\n{msg}")
+        self.console.print(Panel(Markdown(msg), title="Commit Message", border_style="green"))
         self._exec_git(["git", "commit", "-m", msg])
 
     def push_commits(self):
         """Pushes commits to remote."""
         self.logger.info("Pushing to remote...")
-        self._exec_git(["git", "push"])
-        self.logger.info("Push successful.")
+        with self.console.status("[bold green]Pushing to remote...[/bold green]"):
+            self._exec_git(["git", "push"])
+        self.console.print("[bold green]Push successful.[/bold green]")
 
     def generate_message(self, group: str, diff: str, cache: Dict[str, str]) -> str:
         """Generates a commit message using AI or cache."""
@@ -147,14 +156,15 @@ class CommitEngine:
         template = self.template_env.get_template("commit_message.j2")
         prompt = template.render(group_name=group, diff_text=diff, use_emoji=use_emoji)
 
-        raw = generate_with_ai(
-            prompt,
-            provider=provider,
-            model=model,
-            api_key=api_key,
-            debug=self.debug,
-            **self.kwargs,
-        )
+        with self.console.status(f"[bold blue]Generating message for {group}...[/bold blue]"):
+            raw = generate_with_ai(
+                prompt,
+                provider=provider,
+                model=model,
+                api_key=api_key,
+                debug=self.debug,
+                **self.kwargs,
+            )
         return sanitize_ai_commit_message(raw)
 
     def is_ahead_of_remote(self) -> bool:
@@ -237,16 +247,17 @@ class CommitEngine:
                 self.logger.error("Push aborted due to failed commits.")
 
         if self.dry_run:
-            self.logger.info(f"Dry run done. See {self.dry_run_path}")
+            self.console.print(f"[bold green]Dry run done.[/bold green] See {self.dry_run_path}")
         else:
-            self.logger.info("Done.")
+            self.console.print("[bold green]Done.[/bold green]")
             if failed:
-                self.logger.warning(f"Failed groups: {failed}")
+                self.console.print(f"[bold red]Failed groups: {failed}[/bold red]")
 
 
 def run_commit_engine(**kwargs):
     """Entry point for the commit engine."""
-    logger = configure_logger("devgen.commit")
+    debug = kwargs.get("debug", False)
+    logger = configure_logger("devgen.commit", console=debug)
     try:
         engine = CommitEngine(**kwargs)
         engine.execute()
