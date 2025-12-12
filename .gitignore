@@ -47,3 +47,4 @@ logs/
 devgen.egg-info/
 build/
 devgen_utils.egg-info/
+devgen_cli.egg-info/
