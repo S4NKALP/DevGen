@@ -23,13 +23,13 @@
 
 ```bash
 # Stable release from PyPI
-pip install devgen
+pip install devgen-cli
 
 # Using pipx (recommended for isolated CLI)
-pipx install devgen
+pipx install devgen-cli
 
 # Using uv (fast Python package manager)
-uv tool install devgen
+uv tool install devgen-cli
 ```
 
 ## 🚀 Quick Start
@@ -63,12 +63,14 @@ devgen commit run --force-rebuild
 ```
 
 **How it works:**
+
 - DevGen detects all staged and unstaged changes
 - Groups files by directory
 - Generates semantic commit messages for each group using AI
 - Follows [Conventional Commits](https://www.conventionalcommits.org/) format
 
 **Additional commit commands:**
+
 ```bash
 # View cached commit messages
 devgen commit list-cached
@@ -96,6 +98,7 @@ devgen changelog generate --output CHANGES.md
 ```
 
 The changelog follows Semantic Release conventions, categorizing commits into:
+
 - **BREAKING CHANGES**
 - **Features**
 - **Bug Fixes**
@@ -136,6 +139,7 @@ devgen gitignore generate --offline Python
 ```
 
 **Options:**
+
 - `--append` / `--overwrite` - Append to or overwrite existing `.gitignore`
 - `--output` - Specify output file path (default: `.gitignore`)
 - `--offline` - Use only cached templates
@@ -149,12 +153,14 @@ devgen license generate
 ```
 
 This will:
+
 1. Show available licenses (MIT, Apache-2.0, GPL-3.0, etc.)
 2. Prompt for author name
 3. Prompt for year (defaults to current year)
 4. Generate the license file
 
 **Available licenses:**
+
 - MIT
 - Apache-2.0
 - GPL-2.0, GPL-3.0
@@ -176,6 +182,7 @@ devgen setup config
 ```
 
 **Configuration options:**
+
 - `provider` - AI provider: `gemini`, `openai`, `anthropic`, `huggingface`, or `openrouter`
 - `model` - Model name (e.g., `gemini-2.5-flash`, `gpt-4`, `claude-3-opus`)
 - `api_key` - Your API key
@@ -184,6 +191,7 @@ devgen setup config
 ## 📋 Command Reference
 
 ### Commit Commands
+
 ```bash
 devgen commit run [--dry-run] [--push] [--debug] [--force-rebuild]
 devgen commit validate
@@ -192,27 +200,32 @@ devgen commit clear-cache
 ```
 
 ### Changelog Commands
+
 ```bash
 devgen changelog generate [--output FILE] [--from REF]
 ```
 
 ### Release Commands
+
 ```bash
 devgen release notes [--version VERSION] [--output FILE] [--from REF]
 ```
 
 ### Gitignore Commands
+
 ```bash
 devgen gitignore generate [TEMPLATES...] [--output FILE] [--append/--overwrite] [--offline]
 devgen gitignore list [--cached]
 ```
 
 ### License Commands
+
 ```bash
 devgen license generate [--output FILE]
 ```
 
 ### Setup Commands
+
 ```bash
 devgen setup config
 ```
