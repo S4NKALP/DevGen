@@ -12,7 +12,7 @@ class ChangelogGenerator:
     """Generates a changelog from git history using Semantic Release style."""
 
     def __init__(self, logger=None):
-        self.logger = logger or configure_logger("devgen.changelog")
+        self.logger = logger or configure_logger("devtools.changelog")
 
     def _exec_git(self, args: List[str]) -> str:
         """Executes a git command."""
@@ -143,10 +143,19 @@ class ChangelogGenerator:
             "Other Changes",
         ]
 
+        emoji_map = {
+            "BREAKING CHANGES": "💥 BREAKING CHANGES",
+            "Features": "✨ Features",
+            "Bug Fixes": "🐛 Bug Fixes",
+            "Documentation": "📚 Documentation",
+            "Other Changes": "🔨 Other Changes",
+        }
+
         for section in order:
             commits = groups.get(section)
             if commits:
-                md.append(f"## {section}\n")
+                header = emoji_map.get(section, section)
+                md.append(f"## {header}\n")
                 for c in commits:
                     scope = f"**{c['scope']}**: " if c["scope"] else ""
                     md.append(f"- {scope}{c['subject']} ({c['hash'][:7]})")
@@ -170,12 +179,12 @@ class ChangelogGenerator:
             # Let's implement prepend logic if file exists.
             if path.exists():
                 old_content = path.read_text(encoding="utf-8")
-                new_content = md_content + "\n\n" + old_content
+                new_content = old_content + "\n\n" + md_content
                 path.write_text(new_content, encoding="utf-8")
             else:
                 path.write_text(md_content, encoding="utf-8")
 
             self.logger.info(f"Changelog written to {output_file}")
-            print(f"Changelog updated: {output_file}")
+            print(f" Changelog updated: {output_file}")
         else:
             print(md_content)
