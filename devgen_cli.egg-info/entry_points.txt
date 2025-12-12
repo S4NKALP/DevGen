@@ -1,0 +1,2 @@
+[console_scripts]
+devgen = devgen.cli.main:app
