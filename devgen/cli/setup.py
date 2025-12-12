@@ -14,6 +14,7 @@ app = typer.Typer(
 
 @app.command("config")
 def setup_config() -> None:
+    """Interactively setup configuration."""
     typer.secho("🛠️  Interactive Configuration Setup", fg=typer.colors.CYAN, bold=True)
 
     config_path = Path.home() / ".devgen.yaml"
@@ -36,16 +37,22 @@ def setup_config() -> None:
         default=current_config.get("provider", "gemini"),
         style=style,
     ).ask()
+    if provider is None:
+        raise typer.Exit(code=130)
 
     model_default = current_config.get("model", "gemini-2.5-flash")
 
     model = questionary.text(
         "Enter Model Name:", default=model_default, style=style
     ).ask()
+    if model is None:
+        raise typer.Exit(code=130)
 
     api_key = questionary.password(
         "Enter API Key (leave empty to keep existing or none):", style=style
     ).ask()
+    if api_key is None:
+        raise typer.Exit(code=130)
 
     if not api_key:
         api_key = current_config.get("api_key", "")
@@ -56,6 +63,8 @@ def setup_config() -> None:
         default="Yes" if current_config.get("emoji", True) else "No",
         style=style,
     ).ask()
+    if emoji_choice is None:
+        raise typer.Exit(code=130)
     emoji = emoji_choice == "Yes"
 
     # Save Config
@@ -69,8 +78,8 @@ def setup_config() -> None:
     try:
         with config_path.open("w", encoding="utf-8") as f:
             yaml.dump(new_config, f, default_flow_style=False)
-        typer.secho(f"\n Configuration saved to {config_path}", fg=typer.colors.GREEN)
+        typer.secho(f"\nConfiguration saved to {config_path}", fg=typer.colors.GREEN)
         typer.echo(yaml.dump(new_config, default_flow_style=False))
     except Exception as e:
-        typer.secho(f"\n Failed to save configuration: {e}", fg=typer.colors.RED)
+        typer.secho(f"\nFailed to save configuration: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)

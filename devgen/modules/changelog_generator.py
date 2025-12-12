@@ -12,7 +12,7 @@ class ChangelogGenerator:
     """Generates a changelog from git history using Semantic Release style."""
 
     def __init__(self, logger=None):
-        self.logger = logger or configure_logger("devtools.changelog")
+        self.logger = logger or configure_logger("devgen.changelog")
 
     def _exec_git(self, args: List[str]) -> str:
         """Executes a git command."""
