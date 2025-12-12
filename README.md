@@ -1,506 +1,249 @@
-# DevTools
+# DevGen
 
-A collection of developer tools to enhance your workflow. This package includes tools for generating commit messages, changelogs, hooks, and .gitignore files, all accessible from a single unified CLI: `devtools`.
+<div align="center">
 
-## Installation
+<img src="https://img.shields.io/pypi/v/devgen?color=blue&label=PyPI&logo=pypi&logoColor=white" alt="PyPI">
+<img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python">
+<a href="https://github.com/S4NKALP/devgen/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg" alt="License"></a>
+
+</div>
+
+**DevGen** is an AI-powered developer toolkit that automates common Git and project management tasks. Generate semantic commit messages, changelogs, release notes, `.gitignore` files, and licenses—all from a single unified CLI.
+
+## ✨ Features
+
+- 🚀 **AI-Powered Commit Messages** - Automatically generate semantic commit messages from your staged changes using AI
+- 📝 **Changelog Generation** - Create changelogs from git history using conventional commits
+- 🚀 **Release Notes** - Generate clean, emoji-enhanced release notes for your releases
+- 🙈 **Gitignore Templates** - Generate `.gitignore` files from GitHub's official templates
+- 📄 **License Generation** - Quickly generate open source licenses with interactive setup
+- ⚙️ **Multi-Provider AI Support** - Works with Gemini, OpenAI, Anthropic, HuggingFace, and OpenRouter
+
+## 📦 Installation
 
 ```bash
 # Stable release from PyPI
-pip install devtools-utils
+pip install devgen
 
 # Using pipx (recommended for isolated CLI)
-pipx install devtools-utils
+pipx install devgen
 
 # Using uv (fast Python package manager)
-uv tool install devtools-utils
+uv tool install devgen
 ```
 
-Arch Linux prerequisites (for pipx/uv):
+## 🚀 Quick Start
+
+### 1. Initial Setup
+
+Configure your AI provider and API key:
 
 ```bash
-sudo pacman -S --needed python python-pip python-pipx git
-# optional: uv via pipx
-pipx install uv
+devgen setup config
 ```
 
-## Configuration
+This will create a configuration file at `~/.devgen.yaml` with your preferred AI provider, model, and API key.
 
-### API Keys
+### 2. Generate Commit Messages
 
-The tools use various APIs that require API keys. You can set these using the config command:
+Stage your changes and let DevGen generate semantic commit messages:
 
 ```bash
-# Set AI provider API key (required for AI features)
-# For OpenRouter
-devtools config set OPENROUTER_API_KEY "your-openrouter-api-key"
+# Dry run to preview commit messages
+devgen commit run --dry-run
 
-# For OpenAI
-devtools config set OPENAI_API_KEY "your-openai-api-key"
+# Actually commit with AI-generated messages
+devgen commit run
 
-# For Google Gemini
-devtools config set GOOGLE_API_KEY "your-google-api-key"
+# Commit and automatically push
+devgen commit run --push
 
-# For Anthropic Claude
-devtools config set ANTHROPIC_API_KEY "your-anthropic-api-key"
-
-# For Hugging Face
-devtools config set HUGGINGFACE_API_KEY "your-huggingface-api-key"
-
-# Set GitHub token (recommended for license generator)
-devtools config set GITHUB_TOKEN "your-github-token"
+# Force regeneration of commit messages
+devgen commit run --force-rebuild
 ```
 
-Or set them in your environment:
+**How it works:**
+- DevGen detects all staged and unstaged changes
+- Groups files by directory
+- Generates semantic commit messages for each group using AI
+- Follows [Conventional Commits](https://www.conventionalcommits.org/) format
+
+**Additional commit commands:**
+```bash
+# View cached commit messages
+devgen commit list-cached
+
+# Clear the commit cache
+devgen commit clear-cache
+
+# Check what files are staged
+devgen commit validate
+```
+
+### 3. Generate Changelogs
+
+Create changelogs from your git history:
 
 ```bash
-# AI Provider API keys
-export OPENROUTER_API_KEY="your-openrouter-api-key"
-export OPENAI_API_KEY="your-openai-api-key"
-export GOOGLE_API_KEY="your-google-api-key"
-export ANTHROPIC_API_KEY="your-anthropic-api-key"
-export HUGGINGFACE_API_KEY="your-huggingface-api-key"
+# Generate changelog from last tag to HEAD
+devgen changelog generate
 
-# GitHub token for license generator
-export GITHUB_TOKEN="your-github-token"
+# Generate from a specific reference
+devgen changelog generate --from v1.0.0
+
+# Output to a custom file
+devgen changelog generate --output CHANGES.md
 ```
 
-### Managing Configuration
+The changelog follows Semantic Release conventions, categorizing commits into:
+- **BREAKING CHANGES**
+- **Features**
+- **Bug Fixes**
+- **Documentation**
+- **Other Changes**
+
+### 4. Generate Release Notes
+
+Create release notes for your releases:
 
 ```bash
-# Show all configuration
-devtools config show
+# Generate release notes
+devgen release notes --version 1.4.0
 
-# Show specific value
-devtools config show OPENROUTER_API_KEY
+# Custom output file
+devgen release notes --version 1.4.0 --output RELEASE.md
 
-# Delete a value
-devtools config delete OPENROUTER_API_KEY
-
-# Clear all configuration
-devtools config clear
+# From a specific reference
+devgen release notes --version 1.4.0 --from v1.3.0
 ```
 
-Configuration files are stored in:
+### 5. Generate .gitignore Files
 
-- `~/.devtools/config.yaml`
-
-Example config.yaml:
-
-```yaml
-# API Keys
-OPENROUTER_API_KEY:
-OPENAI_API_KEY:
-GOOGLE_API_KEY:
-ANTHROPIC_API_KEY:
-HUGGINGFACE_API_KEY:
-GITHUB_TOKEN:
-
-# AI Settings
-provider: openrouter # or "openai", "gemini", "claude", "huggingface"
-model: mistralai/mixtral-8x7b-instruct # model name for the selected provider
-max_tokens: 1024
-temperature: 0.7
-output_format: text
-
-# Commit Settings
-conventional_commits: true
-emoji: false
-
-# Repository Settings
-repositories: []
-```
-
-## Configuration via CLI
-
-You can set up all configuration options for DevTools using the CLI. This is the recommended way to configure your `~/.devtools/config.yaml` file:
+Create `.gitignore` files from GitHub templates:
 
 ```bash
-# Set AI provider (required for AI features)
-devtools config set provider "openrouter"  # or "openai", "gemini", "claude", "huggingface"
+# Interactive mode (search and select templates)
+devgen gitignore generate
 
-# Set preferred AI model (optional, depends on provider)
-# For OpenRouter
-devtools config set model "mistralai/mixtral-8x7b-instruct"
-# For OpenAI
-devtools config set model "gpt-4-turbo-preview"
-# For Gemini
-devtools config set model "gemini-pro"
-# For Claude
-devtools config set model "claude-3-opus-20240229"
-# For Hugging Face
-devtools config set model "mistralai/Mixtral-8x7B-Instruct-v0.1"
+# Specify templates directly
+devgen gitignore generate Python Node Docker
 
-# Set temperature for AI completions (optional, default is 0.7)
-devtools config set temperature 0.7
+# List available templates
+devgen gitignore list
 
-# Set maximum tokens for AI completions (optional, default is 150)
-devtools config set max_tokens 150
-
-# Set conventional commit style (optional, default is true)
-devtools config set conventional_commits true
-
-# Enable or disable emojis in commit messages (optional, default is false)
-devtools config set emoji false
-
-# Set output format (optional, e.g., text or markdown)
-devtools config set output_format text
-
-# Set repositories list (optional, usually not needed)
-devtools config set repositories "[]"
-```
-
-To view your current configuration:
-
-```bash
-devtools config show
-```
-
-To delete a config value:
-
-```bash
-devtools config delete output_format
-```
-
-To clear all config:
-
-```bash
-devtools config clear
-```
-
-All configuration is stored in `~/.devtools/config.yaml` and can be managed entirely through these commands. You do not need to manually edit the YAML file.
-
-## Usage
-
-All tools are available under the main `devtools` command:
-
-```
-devtools [COMMAND] [SUBCOMMAND] [OPTIONS]
-```
-
-### Commit Message Generator
-
-Generate and apply commit messages, create changelogs, and manage configuration.
-
-#### Generate Commit Message
-
-```bash
-devtools commit generate [OPTIONS]
+# Use cached templates (offline mode)
+devgen gitignore generate --offline Python
 ```
 
 **Options:**
+- `--append` / `--overwrite` - Append to or overwrite existing `.gitignore`
+- `--output` - Specify output file path (default: `.gitignore`)
+- `--offline` - Use only cached templates
 
-- `--files, -f [FILE]...` Specific files to generate commit messages for
-- `--repo, -r PATH` Repository path (default: current directory)
-- `--commit, -c` Automatically commit changes
-- `--push, -p` Push changes after commit
-- `--conventional/--no-conventional` Use conventional commit format (default: True)
-- `--no-stage` Skip automatic staging of changes
-- `--sign` Sign commits with GPG
-- `--temperature FLOAT` AI temperature (0.0-1.0)
- - `--emoji/--no-emoji` Include emoji prefixes (default: disabled)
- - `--smart-group/--per-file` Group multi-file changes into one commit (default: smart-group)
-  - `--no-verify` Bypass git hooks when committing
+### 6. Generate Licenses
 
-Commit messages follow the conventional format (emojis optional):
-
-When emojis are enabled, these prefixes are used:
-- ✨ feat: New feature
-- 🐛 fix: Bug fix
-- 📚 docs: Documentation
-- 💅 style: Formatting, missing semi colons, etc
-- ♻️ refactor: Code refactoring
-- ✅ test: Adding tests
-- 🔧 chore: Maintenance
-
-Per-file vs grouped commits:
-
-- Use `--smart-group` (default) to generate a single message that covers all staged changes.
-- Use `--per-file` to generate a message per changed file. The CLI will create separate git commits, one per file, each with its own AI-generated message.
-
-Examples:
+Generate open source licenses interactively:
 
 ```bash
-# Single grouped message (default behavior)
-devtools commit generate -c
-
-# Separate commits per file
-devtools commit generate --per-file -c
+devgen license generate
 ```
 
-#### Changelog Generation
+This will:
+1. Show available licenses (MIT, Apache-2.0, GPL-3.0, etc.)
+2. Prompt for author name
+3. Prompt for year (defaults to current year)
+4. Generate the license file
+
+**Available licenses:**
+- MIT
+- Apache-2.0
+- GPL-2.0, GPL-3.0
+- LGPL-2.1
+- AGPL-3.0
+- BSD-2-Clause, BSD-3-Clause
+- MPL-2.0
+- EPL-2.0
+- BSL-1.0
+- CC0-1.0
+- Unlicense
+
+## ⚙️ Configuration
+
+Configuration is stored in `~/.devgen.yaml`. You can edit it manually or use the interactive setup:
 
 ```bash
-# From commit subcommand (legacy path)
-devtools commit changelog generate [OPTIONS]
-
-# Top-level changelog commands
-devtools changelog generate [OPTIONS]              # from git history (alias: g)
-devtools changelog generate-interactive [OPTIONS]  # interactive mode (alias: i)
-devtools changelog generate-from-file [OPTIONS]    # from a file (alias: f)
+devgen setup config
 ```
 
-**Options (history-based):**
+**Configuration options:**
+- `provider` - AI provider: `gemini`, `openai`, `anthropic`, `huggingface`, or `openrouter`
+- `model` - Model name (e.g., `gemini-2.5-flash`, `gpt-4`, `claude-3-opus`)
+- `api_key` - Your API key
+- `emoji` - Enable/disable emojis in commit messages (default: `true`)
 
-- `--version, -v VERSION` Version number (required)
-- `--from-tag, -t TAG` Generate from this tag
-- `--days, -d N` Generate from the last N days
-- `--commits, -n N` Generate from the last N commits
-- `--output, -o FILE` Output file path (default: CHANGELOG.md)
-- `--temperature FLOAT` AI temperature (default: 0.7)
+## 📋 Command Reference
 
-**Options (interactive):**
-
-- `--version, -v VERSION` Version number (required)
-- `--output, -o FILE` Output file path (default: CHANGELOG.md)
-- `--temperature FLOAT` AI temperature (default: 0.7)
-
-**Options (from file):**
-
-- `--version, -v VERSION` Version number (required)
-- `--input, -i FILE` Input changes file (required)
-- `--output, -o FILE` Output file path (default: CHANGELOG.md)
-- `--temperature FLOAT` AI temperature (default: 0.7)
-
-The changelog generator supports three modes:
-
-1. Git history: Automatically generates changelog from commit history
-2. Interactive: Enter changes manually with emoji prefixes
-3. File-based: Generate from a file containing changes
-
-Changes are grouped by type with emojis:
-
-- ✨ Added
-- 🔄 Changed
-- 🐛 Fixed
-- 🚀 Performance
-- 📝 Documentation
-- 🔧 Maintenance
-- 🗑️ Removed
-- 🔒 Security
-
-#### Repository Status
-
+### Commit Commands
 ```bash
-devtools commit status
+devgen commit run [--dry-run] [--push] [--debug] [--force-rebuild]
+devgen commit validate
+devgen commit list-cached
+devgen commit clear-cache
 ```
 
----
-
-### Gitignore Generator
-
-Generate .gitignore files for your project, either by auto-detecting project types or specifying technologies.
-
-#### Auto-detect Project Types
-
+### Changelog Commands
 ```bash
-devtools gitignore auto [OPTIONS]
+devgen changelog generate [--output FILE] [--from REF]
 ```
 
-**Options:**
-
-- `--directory, -d DIR` Directory to scan (default: current directory)
-- `--output, -o FILE` Output file path (default: .gitignore)
-
-#### Generate for Specific Technologies
-
+### Release Commands
 ```bash
-devtools gitignore generate python django vscode [OPTIONS]
+devgen release notes [--version VERSION] [--output FILE] [--from REF]
 ```
 
-**Options:**
-
-- `--output, -o FILE` Output file path (default: .gitignore)
-
-The generator uses the gitignore.io API to fetch templates. No API key is required.
-
----
-
-### License Generator
-
-Generate LICENSE files for your project using templates from GitHub's license API.
-
+### Gitignore Commands
 ```bash
-# List available licenses
-devtools license list
-
-# Generate a license
-devtools license generate [OPTIONS]
+devgen gitignore generate [TEMPLATES...] [--output FILE] [--append/--overwrite] [--offline]
+devgen gitignore list [--cached]
 ```
 
-**Options:**
-
-- `--type, -t TYPE` Type of license to generate (e.g., mit, apache-2.0, gpl-3.0)
-- `--author, -a NAME` Name of the author/copyright holder
-- `--year, -y YEAR` Year for the copyright notice (defaults to current year)
-- `--output, -o FILE` Output file path (default: LICENSE)
-- `--multi, -m` Generate multiple licenses in one run
-
-Example:
-
+### License Commands
 ```bash
-# List available licenses
-devtools license list
-
-# Interactive mode
-devtools license generate
-
-# With all options specified
-devtools license generate --type mit --author "John Doe" --year 2024 --output LICENSE
-
-# Generate multiple licenses in one go
-devtools license generate --multi
+devgen license generate [--output FILE]
 ```
 
-The license generator uses GitHub's license API to fetch templates. For optimal performance:
-
-1. Set up a GitHub token:
-   ```bash
-   devtools config set GITHUB_TOKEN "your-github-token"
-   ```
-   This increases your API rate limit from 60 to 5,000 requests per hour.
-
-2. If no token is set, the tool will use a fallback list of common licenses.
-
-If an invalid license type is provided, the tool will display a list of available licenses.
-
-When generating multiple licenses with `--multi`, separate files are created (e.g., `LICENSE_mit`, `LICENSE_apache-2.0`). A summary `LICENSE.md` is also written linking to each generated license.
-
----
-
-### Hooks Manager
-
-Manage Git hooks easily. Install lint/test hooks for `pre-commit` and `pre-push`.
-
+### Setup Commands
 ```bash
-# Install both pre-commit and pre-push hooks in current repo
-devtools hooks install
-
-# Install only pre-commit
-devtools hooks install --pre-commit --no-pre-push
-
-# Install only pre-push
-devtools hooks install --no-pre-commit --pre-push
-
-# Uninstall hooks
-devtools hooks uninstall           # both
-devtools hooks uninstall --pre-commit --no-pre-push
-
-# Use your own script templates
-devtools hooks install \
-  --pre-commit-template ./scripts/hooks/my-pre-commit.sh \
-  --pre-push-template ./scripts/hooks/my-pre-push.sh
-
-# List hooks present in the repository
-devtools hooks list
+devgen setup config
 ```
 
-The hooks auto-detect your ecosystem and run sensible defaults:
+## 🎯 Use Cases
 
-- Node.js: `npm run lint --if-present` then `eslint` or `prettier --check`; tests via `npm test`/`pnpm test`/`yarn test`
-- Python: `ruff .` or fallback to `black --check .`; tests via `pytest -q`
-- Rust: `cargo fmt --check`; tests via `cargo test`
-- Go: `gofmt -l` (fail if unformatted), `go vet`; tests via `go test ./...`
-- Java: Gradle `check`/`test` or Maven `verify -DskipTests=true`/`test`
-- If `.pre-commit-config.yaml` is present, `pre-commit run --all-files` is used for pre-commit, and `pre-commit run --hook-stage push --all-files` for pre-push.
+- **Automated Commit Workflow**: Let AI analyze your changes and generate meaningful commit messages
+- **Release Preparation**: Automatically generate changelogs and release notes from git history
+- **Project Setup**: Quickly add `.gitignore` and license files to new projects
+- **CI/CD Integration**: Use in scripts to automate documentation generation
 
-You can customize hooks by editing files in `.git/hooks/` after installation.
-Alternatively, pass `--pre-commit-template` and/or `--pre-push-template` to install from your own script files. The files will be copied into `.git/hooks/` and made executable.
+## 🔧 Requirements
 
-Note: If a hook already exists, DevTools creates a timestamped backup in `.git/hooks/` with the `.bak` suffix before overwriting, e.g., `pre-commit.20250101123000.bak`.
+- Python 3.10 or higher
+- Git repository (for commit/changelog/release features)
+- API key for your chosen AI provider
 
-Auto-fix behavior (pre-commit):
+## 📝 License
 
-- If initial checks fail, DevTools attempts to auto-fix issues by running `scripts/format.py` and `scripts/lintfix.py` if those files exist in your repo.
-- Any changes made are automatically staged (`git add -A`), and checks are re-run. The commit will fail only if the re-run still fails.
-- You can run these scripts manually as well:
+This project is licensed under the GPL-3.0-or-later License - see the [LICENSE](LICENSE) file for details.
 
-```bash
-python3 scripts/format.py
-python3 scripts/lintfix.py
-```
+## 🤝 Contributing
 
----
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## Features
+## 📚 Links
 
-- **Commit Message Generator:**
-  - AI-powered commit message suggestions using multiple providers:
-    - OpenRouter (Mixtral 8x7B)
-    - OpenAI (GPT-4, GPT-3.5)
-    - Google Gemini
-    - Anthropic Claude
-    - Hugging Face
-  - Conventional commit format with emojis
-  - GPG signing and push support
-  - Changelog generation from commit history
-  - Repository status with diff previews
-- **Gitignore Generator:**
-  - Auto-detects project types and generates .gitignore
-  - Uses gitignore.io API for up-to-date templates
-  - No API key required
-  - Falls back to generic template if API is unavailable
-- **License Generator:**
-  - Generates LICENSE files using GitHub's license API
-  - Supports all licenses available on GitHub
-  - Interactive license selection
-  - Automatic year and author replacement
+- **Homepage**: [https://github.com/S4NKALP/devgen](https://github.com/S4NKALP/devgen)
+- **PyPI**: [https://pypi.org/project/devgen](https://pypi.org/project/devgen)
 
-## Requirements
+## 🙏 Acknowledgments
 
-- Python 3.8+
-- Git
-- AI Provider API key (one of):
-  - OpenRouter API key
-  - OpenAI API key
-  - Google API key
-  - Anthropic API key
-  - Hugging Face API key
-- GitHub token (recommended for license generator)
-
-## Development
-
-```bash
-# Clone the repository
-git clone https://github.com/S4NKALP/DevTools.git
-cd DevTools
-
-# (Optional) Create and activate a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install package in editable (dev) mode
-pip install -e .
-
-# Install dev tools (optional but recommended)
-pip install pytest black ruff
-
-# Run tests
-pytest
-
-# Lint and format
-black .
-
-# Or use the helper scripts (if present)
-python3 scripts/format.py
-python3 scripts/lintfix.py
-
-# Run the CLI locally after editable install
-devtools --help
-```
-
-Build from source (PEP 517):
-
-```bash
-# Requires pyproject.toml
-python -m build
-# or with uv
-uv build
-```
-
-## Contributing
-
-Contributions are welcome! Please open issues or submit pull requests.
-
-## License
-
-This project is licensed under the GNU General Public License v3.0 (GPL-3.0) - see the LICENSE file for details.
+- Uses GitHub's official [gitignore templates](https://github.com/github/gitignore)
+- Follows [Conventional Commits](https://www.conventionalcommits.org/) specification

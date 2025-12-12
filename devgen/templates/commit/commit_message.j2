@@ -1,0 +1,15 @@
+
+Analyze the following git diff for the directory `{{ group_name }}` and generate a detailed semantic release commit message4. Format the output as:
+1. A summary title in semantic release format (type(scope): summary) — scope can be the directory or 'root'.
+2. A short summary paragraph if needed.
+3. Bullet points listing the main changes, grouped as 'New Features', 'Enhancements & Refinements', and 'Bug Fixes' if relevant. Use bold for feature/section names.
+{% if use_emoji %}
+4. Use appropriate emojis for the commit type and sections (e.g., 🚀 for features, 🐛 for bugs).
+{% else %}
+4. Do NOT use any emojis in the commit message.
+{% endif %}
+Output only the commit message, don't include explanations or extra text.
+
+Here is the git diff for `{{ group_name }}`:
+
+{{ diff_text }}

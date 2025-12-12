@@ -1,23 +1,29 @@
 """
-Setup script for devtools package.
+Setup script for devgen package.
 """
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
-    name="devtools-utils",
+    name="devgen",
     version="0.1.0",
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        "click>=8.0.0",
-        "rich>=10.0.0",
-        "requests>=2.25.0",
-        "pyyaml>=5.0.0",
+        "anthropic>=0.75.0",
+        "google-generativeai>=0.8.5",
+        "jinja2>=3.1.6",
+        "openai>=2.11.0",
+        "pyyaml>=6.0.3",
+        "questionary>=2.1.1",
+        "requests>=2.32.5",
+        "rich>=14.2.0",
+        "toml>=0.10.2",
+        "typer>=0.20.0",
     ],
     entry_points={
         "console_scripts": [
-            "devtools=devtools.cli:cli",
+            "devgen=devgen.cli.main:app",
         ],
     },
     author="Sankalp Tharu",
@@ -25,7 +31,7 @@ setup(
     description="A collection of developer tools",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/S4NKALP/DevTools",
+    url="https://github.com/S4NKALP/devgen",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
@@ -37,5 +43,5 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.10",
 )
