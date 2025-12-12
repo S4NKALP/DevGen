@@ -3,16 +3,16 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "devtools-utils"
+name = "devgen"
 version = "0.1.0"
 description = "A collection of developer tools"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 authors = [
-  { name = "Sankalp Tharu", email = "sankalptharu50028@gmail.com" },
+{ name = "Sankalp Tharu", email = "sankalptharu50028@gmail.com" },
 ]
 license = { text = "GPL-3.0-or-later" }
-keywords = ["devtools", "cli", "git", "changelog", "gitignore", "license"]
+keywords = ["devgen", "cli", "git", "changelog", "gitignore", "license", "commit-generator", "commit"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -25,22 +25,31 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
 ]
 dependencies = [
-  "click>=8.0.0",
-  "rich>=10.0.0",
-  "requests>=2.25.0",
-  "pyyaml>=5.0.0",
+    "anthropic>=0.75.0",
+    "google-generativeai>=0.8.5",
+    "jinja2>=3.1.6",
+    "openai>=2.11.0",
+    "pyyaml>=6.0.3",
+    "questionary>=2.1.1",
+    "requests>=2.32.5",
+    "rich>=14.2.0",
+    "toml>=0.10.2",
+    "typer>=0.20.0",
 ]
-
 [project.urls]
-Homepage = "https://github.com/S4NKALP/DevTools"
+Homepage = "https://github.com/S4NKALP/devgen"
 
 [project.scripts]
-devtools = "devtools.cli:cli"
+devgen = "devgen.cli.main:app"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["devtools*"]
+include = ["devgen*"]
 
-
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.0",
+    "ruff>=0.14.9",
+]
