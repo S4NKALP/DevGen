@@ -156,7 +156,7 @@ class CommitEngine:
         template = self.template_env.get_template("commit_message.j2")
         prompt = template.render(group_name=group, diff_text=diff, use_emoji=use_emoji)
 
-        with self.console.status(f"[bold blue]Generating message for {group}...[/bold blue]"):
+        with self.console.status(f"[bold blue]Generating commit message...[/bold blue]"):
             raw = generate_with_ai(
                 prompt,
                 provider=provider,
