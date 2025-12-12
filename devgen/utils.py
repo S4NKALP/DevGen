@@ -132,7 +132,7 @@ def delete_file(filepath: Path | str) -> bool:
 
 
 def load_template_env(sub_dir: str) -> Environment:
-    template_dir = Path(__file__).parent / "prompt_templates" / sub_dir
+    template_dir = Path(__file__).parent / "templates" / sub_dir
     return Environment(loader=FileSystemLoader(template_dir))
 
 

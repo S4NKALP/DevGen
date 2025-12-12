@@ -5,8 +5,8 @@ Setup script for devgen package.
 from setuptools import find_packages, setup
 
 setup(
-    name="devgen-setup",
-    version="0.2.0",
+    name="devgen-cli",
+    version="0.2.1",
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
