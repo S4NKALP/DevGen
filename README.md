@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="https://img.shields.io/pypi/v/devgen?color=blue&label=PyPI&logo=pypi&logoColor=white" alt="PyPI">
+<img src="https://img.shields.io/pypi/v/devgen-cli?color=blue&label=PyPI&logo=pypi&logoColor=white" alt="PyPI">
 <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python">
 <a href="https://github.com/S4NKALP/devgen/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg" alt="License"></a>
 
