@@ -75,7 +75,7 @@ def extract_commit_messages(filepath: Path | str) -> dict[str, str]:
 
 
 def configure_logger(
-    name: str = "devgen", log_file: Optional[Path | str] = None
+    name: str = "devgen", log_file: Optional[Path | str] = None, console: bool = True
 ) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
@@ -88,9 +88,10 @@ def configure_logger(
     )
 
     # Console handler
-    ch = logging.StreamHandler()
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+    if console:
+        ch = logging.StreamHandler()
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
 
     # File handler
     if log_file:

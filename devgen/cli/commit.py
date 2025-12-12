@@ -52,7 +52,7 @@ def run_commit(
     ] = False,
 ) -> None:
     log_file = get_main_log_path()
-    logger = configure_logger("devgen.cli.commit", log_file)
+    logger = configure_logger("devgen.cli.commit", log_file, console=debug)
     logger.info(f"Log file: {log_file}")
     logger.info(
         f"Options: dry_run={dry_run}, push={push}, debug={debug}, force={force_rebuild}"
