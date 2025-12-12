@@ -6,6 +6,7 @@ import typer
 
 from devgen.cli.changelog import app as changelog_app
 from devgen.cli.commit import app as commit_app
+from devgen.cli.config import app as config_app
 from devgen.cli.gitignore import app as gitignore_app
 from devgen.cli.license import app as license_app
 from devgen.cli.release import app as release_app
@@ -90,6 +91,7 @@ app.add_typer(changelog_app, name="changelog")
 app.add_typer(license_app, name="license")
 app.add_typer(gitignore_app, name="gitignore")
 app.add_typer(release_app, name="release")
+app.add_typer(config_app, name="config")
 
 if __name__ == "__main__":
     try:
