@@ -49,13 +49,19 @@ class CommitEngine:
         self.provider = provider
         self.model = model
         self.logger = logger or configure_logger(
-            "devgen.commit", Path.home() / ".cache" / "devgen" / "commit.log", console=debug
+            "devgen.commit",
+            Path.home() / ".cache" / "devgen" / "commit.log",
+            console=debug,
         )
         self.kwargs = kwargs
         self.dry_run_path = get_commit_dry_run_path()
         self.template_env = load_template_env("commit")
-        
-        self.console = Console(theme=Theme({"info": "dim cyan", "warning": "magenta", "danger": "bold red"}))
+
+        self.console = Console(
+            theme=Theme(
+                {"info": "dim cyan", "warning": "magenta", "danger": "bold red"}
+            )
+        )
 
         # Load config from ~/.devgen.yaml
         from devgen.utils import load_config
@@ -129,7 +135,9 @@ class CommitEngine:
     def commit_staged(self, msg: str):
         """Commits staged changes."""
         self.logger.info(f"Committing:\n{msg}")
-        self.console.print(Panel(Markdown(msg), title="Commit Message", border_style="green"))
+        self.console.print(
+            Panel(Markdown(msg), title="Commit Message", border_style="green")
+        )
         self._exec_git(["git", "commit", "-m", msg])
 
     def push_commits(self):
@@ -156,7 +164,7 @@ class CommitEngine:
         template = self.template_env.get_template("commit_message.j2")
         prompt = template.render(group_name=group, diff_text=diff, use_emoji=use_emoji)
 
-        with self.console.status(f"[bold blue]Generating commit message...[/bold blue]"):
+        with self.console.status("[bold blue]Generating commit message...[/bold blue]"):
             raw = generate_with_ai(
                 prompt,
                 provider=provider,
@@ -247,7 +255,9 @@ class CommitEngine:
                 self.logger.error("Push aborted due to failed commits.")
 
         if self.dry_run:
-            self.console.print(f"[bold green]Dry run done.[/bold green] See {self.dry_run_path}")
+            self.console.print(
+                f"[bold green]Dry run done.[/bold green] See {self.dry_run_path}"
+            )
         else:
             self.console.print("[bold green]Done.[/bold green]")
             if failed:
