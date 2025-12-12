@@ -20,15 +20,16 @@ def list_templates(
         bool, typer.Option("--cached", "-c", help="List only cached templates.")
     ] = False,
 ) -> None:
+    """List available gitignore templates."""
     generator = GitignoreGenerator()
     try:
         if cached:
             templates = generator.list_cached_templates()
-            typer.secho("Cached Templates:", fg=typer.colors.CYAN, bold=True)
+            typer.secho(" Cached Templates:", fg=typer.colors.CYAN, bold=True)
         else:
             typer.secho("Fetching available templates...", fg=typer.colors.YELLOW)
             templates = generator.list_available_templates()
-            typer.secho("Available Templates:", fg=typer.colors.CYAN, bold=True)
+            typer.secho(" Available Templates:", fg=typer.colors.CYAN, bold=True)
 
         if not templates:
             typer.echo("No templates found.")
@@ -38,7 +39,7 @@ def list_templates(
         typer.echo(", ".join(templates))
 
     except Exception as e:
-        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        typer.secho(f" Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
 
@@ -67,6 +68,7 @@ def generate_gitignore(
         typer.Option("--offline", help="Use only cached templates."),
     ] = False,
 ) -> None:
+    """Generate a .gitignore file."""
     generator = GitignoreGenerator()
 
     if not templates:
@@ -79,7 +81,7 @@ def generate_gitignore(
                 available = generator.list_available_templates()
 
             if not available:
-                typer.secho("No templates available.", fg=typer.colors.RED)
+                typer.secho(" No templates available.", fg=typer.colors.RED)
                 raise typer.Exit(code=1)
 
             from devgen.utils import get_questionary_style
@@ -103,11 +105,14 @@ def generate_gitignore(
                     style=style,
                 ).ask()
 
+                if choice is None:
+                    raise typer.Exit(code=130)
+
                 if not choice or choice.startswith("Done"):
                     break
 
                 selected_templates.append(choice)
-                typer.secho(f"Added '{choice}'", fg=typer.colors.GREEN)
+                typer.secho(f"➕ Added '{choice}'", fg=typer.colors.GREEN)
 
             templates = selected_templates
 
@@ -118,10 +123,10 @@ def generate_gitignore(
         except typer.Exit:
             raise
         except KeyboardInterrupt:
-            typer.secho("\n Cancelled by user", fg=typer.colors.YELLOW)
+            typer.secho("\nCancelled by user", fg=typer.colors.YELLOW)
             raise typer.Exit()
         except Exception as e:
-            typer.secho(f"Error fetching templates: {e}", fg=typer.colors.RED)
+            typer.secho(f"❌ Error fetching templates: {e}", fg=typer.colors.RED)
             raise typer.Exit(code=1)
 
     try:
@@ -129,5 +134,5 @@ def generate_gitignore(
             templates, output_file=output, append=append, offline=offline
         )
     except Exception as e:
-        typer.secho(f"Error generating .gitignore: {e}", fg=typer.colors.RED)
+        typer.secho(f"❌ Error generating .gitignore: {e}", fg=typer.colors.RED)
         raise typer.Exit(code=1)

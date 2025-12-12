@@ -26,11 +26,12 @@ def generate_license(
         ),
     ] = "LICENSE",
 ) -> None:
+    """Interactively generate a license file."""
     generator = LicenseGenerator()
     licenses = generator.list_licenses()
 
     if not licenses:
-        typer.secho("❌ No license templates found.", fg=typer.colors.RED)
+        typer.secho(" No license templates found.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
     from devgen.utils import get_questionary_style
@@ -55,20 +56,27 @@ def generate_license(
         style=style,
     ).ask()
 
+    if license_key is None:
+        raise typer.Exit(code=130)
+
     if not license_key:
         raise typer.Exit()
 
     # 2. Enter Author Name
     # Try to guess from git config if possible, but for now just empty default
     author = questionary.text("Enter Author Name:", style=style).ask()
+    if author is None:
+        raise typer.Exit(code=130)
 
     if not author:
-        typer.secho("❌ Author name is required.", fg=typer.colors.RED)
+        typer.secho(" Author name is required.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
     # 3. Enter Year
     current_year = str(datetime.now().year)
     year = questionary.text("Enter Year:", default=current_year, style=style).ask()
+    if year is None:
+        raise typer.Exit(code=130)
 
     # Generate
     try:
@@ -79,6 +87,8 @@ def generate_license(
             overwrite = questionary.confirm(
                 f"File {output} already exists. Overwrite?", default=False, style=style
             ).ask()
+            if overwrite is None:
+                raise typer.Exit(code=130)
             if not overwrite:
                 typer.secho("Operation cancelled.", fg=typer.colors.YELLOW)
                 raise typer.Exit()
