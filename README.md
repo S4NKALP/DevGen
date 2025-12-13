@@ -1,14 +1,15 @@
 # DevGen
 
 <div align="center">
+> PyPI didn't allow the original name, so you'll find it as **devgen-cli** on PyPI
 
 <img src="https://img.shields.io/pypi/v/devgen-cli?color=blue&label=PyPI&logo=pypi&logoColor=white" alt="PyPI">
 <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python">
-<a href="https://github.com/S4NKALP/devgen/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg" alt="License"></a>
+<a href="https://github.com/S4NKALP/DevGen/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg" alt="License"></a>
 
 </div>
 
-**DevGen** is an AI-powered developer toolkit that automates common Git and project management tasks. Generate semantic commit messages, changelogs, release notes, `.gitignore` files, and licenses—all from a single unified CLI.
+**DevGen** is an AI-powered developer toolkit that automates common Git and project management tasks. Generate semantic commit messages, changelogs, release notes, `.gitignore` files, and licenses all from a single unified CLI.
 
 ## ✨ Features
 
@@ -254,7 +255,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📚 Links
 
 - **Homepage**: [https://github.com/S4NKALP/devgen](https://github.com/S4NKALP/devgen)
-- **PyPI**: [https://pypi.org/project/devgen](https://pypi.org/project/devgen)
+- **PyPI**: [https://pypi.org/project/devgen](https://pypi.org/project/devgen0cli)
 
 ## 🙏 Acknowledgments
 
