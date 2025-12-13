@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from devgen.utils import configure_logger
+from devgen.utils import configure_logger, run_git_command
 
 
 class ChangelogGenerator:
@@ -13,22 +13,6 @@ class ChangelogGenerator:
 
     def __init__(self, logger=None):
         self.logger = logger or configure_logger("devgen.changelog")
-
-    def _exec_git(self, args: List[str]) -> str:
-        """Executes a git command."""
-        try:
-            res = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=True,
-            )
-            return res.stdout.strip()
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Git command failed: {e}")
-            raise RuntimeError(f"Git command failed: {e}")
 
     def get_commits(self, from_ref: str = "", to_ref: str = "HEAD") -> List[str]:
         """Fetches commit messages in the specified range."""
@@ -40,7 +24,7 @@ class ChangelogGenerator:
         if not from_ref:
             # If no start ref, try to find the last tag
             try:
-                last_tag = self._exec_git(["git", "describe", "--tags", "--abbrev=0"])
+                last_tag = run_git_command(["git", "describe", "--tags", "--abbrev=0"])
                 cmd = [
                     "git",
                     "log",
@@ -49,11 +33,15 @@ class ChangelogGenerator:
                     f"{last_tag}..HEAD",
                 ]
                 self.logger.info(f"Generating changelog from last tag: {last_tag}")
-            except RuntimeError:
+            except (RuntimeError, subprocess.CalledProcessError):
                 self.logger.info("No tags found, generating for all commits.")
                 cmd = ["git", "log", f"--format={fmt}", "--date=short"]
 
-        return self._exec_git(cmd).split("\n")
+        try:
+            return run_git_command(cmd).split("\n")
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Git command failed: {e}")
+            raise RuntimeError(f"Git command failed: {e}")
 
     def parse_commits(self, raw_commits: List[str]) -> Dict[str, List[Dict]]:
         """Parses raw commit strings into structured data."""

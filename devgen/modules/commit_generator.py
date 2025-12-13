@@ -11,6 +11,7 @@ from devgen.utils import (
     get_commit_dry_run_path,
     is_file_recent,
     load_template_env,
+    run_git_command,
     sanitize_ai_commit_message,
 )
 from rich.console import Console
@@ -68,36 +69,24 @@ class CommitEngine:
 
         self.config = load_config()
 
-    def _exec_git(self, args: List[str], allow_error: bool = False) -> str:
-        """Executes a git command."""
+    def detect_changes(self) -> List[str]:
+        """Detects changed, deleted, or untracked files."""
         try:
-            res = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=not allow_error,
+            out = run_git_command(
+                [
+                    "git",
+                    "ls-files",
+                    "--deleted",
+                    "--modified",
+                    "--others",
+                    "--exclude-standard",
+                ]
             )
-            return res.stdout.strip()
+            return [f.strip() for f in out.split("\n") if f.strip()]
         except subprocess.CalledProcessError as e:
             msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
             self.logger.error(msg)
             raise CommitEngineError(msg) from e
-
-    def detect_changes(self) -> List[str]:
-        """Detects changed, deleted, or untracked files."""
-        out = self._exec_git(
-            [
-                "git",
-                "ls-files",
-                "--deleted",
-                "--modified",
-                "--others",
-                "--exclude-standard",
-            ]
-        )
-        return [f.strip() for f in out.split("\n") if f.strip()]
 
     def group_files(self, files: List[str]) -> Dict[str, List[str]]:
         """Groups files by their parent directory."""
@@ -110,7 +99,14 @@ class CommitEngine:
 
     def generate_diff(self, files: List[str]) -> str:
         """Generates diff for specific files."""
-        return self._exec_git(["git", "--no-pager", "diff", "--staged", "--", *files])
+        try:
+            return run_git_command(
+                ["git", "--no-pager", "diff", "--staged", "--", *files]
+            )
+        except subprocess.CalledProcessError as e:
+            msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
+            self.logger.error(msg)
+            raise CommitEngineError(msg) from e
 
     def _init_dry_run(self):
         """Initializes the dry-run file."""
@@ -130,7 +126,12 @@ class CommitEngine:
             return
         self.logger.info(f"Staging: {files}")
         self.console.print(f"[info]Staging {len(files)} files...[/info]")
-        self._exec_git(["git", "add", *files])
+        try:
+            run_git_command(["git", "add", *files])
+        except subprocess.CalledProcessError as e:
+            msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
+            self.logger.error(msg)
+            raise CommitEngineError(msg) from e
 
     def commit_staged(self, msg: str):
         """Commits staged changes."""
@@ -138,13 +139,25 @@ class CommitEngine:
         self.console.print(
             Panel(Markdown(msg), title="Commit Message", border_style="green")
         )
-        self._exec_git(["git", "commit", "-m", msg])
+        try:
+            run_git_command(["git", "commit", "-m", msg])
+        except subprocess.CalledProcessError as e:
+            msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
+            self.logger.error(msg)
+            raise CommitEngineError(msg) from e
 
     def push_commits(self):
         """Pushes commits to remote."""
         self.logger.info("Pushing to remote...")
         with self.console.status("[bold green]Pushing to remote...[/bold green]"):
-            self._exec_git(["git", "push"])
+            try:
+                run_git_command(["git", "push"])
+            except subprocess.CalledProcessError as e:
+                msg = (
+                    f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
+                )
+                self.logger.error(msg)
+                raise CommitEngineError(msg) from e
         self.console.print("[bold green]Push successful.[/bold green]")
 
     def generate_message(self, group: str, diff: str, cache: Dict[str, str]) -> str:
@@ -178,15 +191,18 @@ class CommitEngine:
     def is_ahead_of_remote(self) -> bool:
         """Checks if local branch has unpushed commits."""
         try:
-            self._exec_git(["git", "fetch", "origin"])
-            count = self._exec_git(
-                ["git", "rev-list", "--count", "@{u}..HEAD"], allow_error=True
+            run_git_command(["git", "fetch", "origin"])
+            count = run_git_command(
+                ["git", "rev-list", "--count", "@{u}..HEAD"], check=False
             )
             if count and int(count) > 0:
                 return True
-        except CommitEngineError:
+        except (subprocess.CalledProcessError, CommitEngineError):
             # Maybe no upstream
-            return bool(self._exec_git(["git", "rev-parse", "HEAD"], allow_error=True))
+            try:
+                return bool(run_git_command(["git", "rev-parse", "HEAD"], check=False))
+            except subprocess.CalledProcessError:
+                return False
         return False
 
     def load_cache(self) -> Dict[str, str]:
@@ -208,7 +224,10 @@ class CommitEngine:
 
         if not diff.strip():
             self.logger.info(f"Skipping empty diff for {group}")
-            self._exec_git(["git", "reset", "HEAD", "--", *files])
+            try:
+                run_git_command(["git", "reset", "HEAD", "--", *files])
+            except subprocess.CalledProcessError:
+                pass  # Ignore reset errors
             return True
 
         msg = self.generate_message(group, diff, cache)
@@ -218,7 +237,10 @@ class CommitEngine:
 
         if self.dry_run:
             self._log_dry_run(group, msg)
-            self._exec_git(["git", "reset", "HEAD", "--", *files])
+            try:
+                run_git_command(["git", "reset", "HEAD", "--", *files])
+            except subprocess.CalledProcessError:
+                pass
         else:
             self.commit_staged(msg)
 
