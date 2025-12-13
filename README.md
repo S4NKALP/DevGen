@@ -2,7 +2,7 @@
 
 <div align="center">
 
-> **Your AI Co-Pilot for Git & Project Management.**
+> **Your AI Powerhouse for Git & Project Management.**
 > Stop wasting time on repetitive tasks. Automate your commits, changelogs, and project essentials with a single CLI.
 >
 > PyPI didn't allow the original name, so you'll find it as **devgen-cli** on PyPI
@@ -15,15 +15,24 @@
 
 ---
 
-**DevGen** isn't just another CLI tool—it's your development workflow on steroids. By leveraging state-of-the-art AI models, DevGen turns tedious manual tasks into one-click magic. From semantic commit messages to comprehensive release notes, DevGen handles the boring stuff so you can focus on building.
+**DevGen** isn't just another CLI tool it's your development workflow on steroids. By leveraging state of the art AI models, DevGen turns tedious manual tasks into one click magic. From semantic commit messages to comprehensive release notes, DevGen handles the boring stuff so you can focus on building.
 
 ## ⚡ Why DevGen?
 
-- **🧠 AI Brain**: Semantic commit messages powered by Gemini, OpenAI, Claude, HuggingFace, and OpenRouter. It reads your diffs and understands your code.
-- **🚀 Battle Tested**: Generates **Conventional Commits** and **Semantic Versioning** compliant changelogs that actually make sense.
-- **⚡ Lightning Fast**: Smart caching and async operations mean you never wait longer than necessary.
-- **Project Essentials**: Quickly add `.gitignore` and license files to your existing projects. Access cached templates instantly, even without internet.
-- **🛠️ Zero Friction**: Interactive setup gets you running in seconds.
+**🧠 AI Brain**
+Semantic commit messages powered by Gemini, OpenAI, Claude, HuggingFace, and OpenRouter. It reads your diffs and understands your code.
+
+**🚀 Battle Tested**
+Generates **Conventional Commits** and **Semantic Versioning** compliant changelogs that actually make sense.
+
+**⚡ Lightning Fast**
+Smart caching and async operations mean you never wait longer than necessary.
+
+**Project Essentials**
+Quickly add `.gitignore` and license files to your existing projects. Access cached templates instantly, even without internet.
+
+**🛠️ Zero Friction**
+Interactive setup gets you running in seconds.
 
 ## 📦 Installation
 
@@ -57,11 +66,12 @@ git add .
 devgen commit run
 ```
 
-*Boom. Done.*
+_Boom. Done._
 
 ## 💡 Feature Deep Dive
 
-### 🤖 AI-Powered Commits
+### 🤖 AI Powered Commits
+
 Stop writing "fix bug" or "wip". DevGen analyzes your staged changes, groups them by component, and generates meaningful, semantic commit messages.
 
 ```bash
@@ -73,6 +83,7 @@ devgen commit run --push
 ```
 
 ### 📝 Changelogs & Release Notes
+
 Turn your git history into beautiful, readable documentation.
 
 ```bash
@@ -84,6 +95,7 @@ devgen release notes --version 2.0.0
 ```
 
 ### 🛡️ Essential Files
+
 Don't waste time searching for templates. Generate the essential files for your project instantly.
 
 ```bash
@@ -98,17 +110,26 @@ devgen license generate
 
 Your settings live in `~/.devgen.yaml`. You can tweak your AI provider, model, and preferences there.
 
-| Option | Description |
-|:---|:---|
+| Option     | Description                                                  |
+| :--------- | :----------------------------------------------------------- |
 | `provider` | `gemini`, `openai`, `anthropic`, `huggingface`, `openrouter` |
-| `model` | Specific model name (e.g., `gemini-2.5-flash`, `gpt-4o`) |
-| `emoji` | Enable/disable gitmojis in commits (`true`/`false`) |
+| `model`    | Specific model name (e.g., `gemini-2.5-flash`, `gpt-4o`)     |
+| `emoji`    | Enable/disable gitmojis in commits (`true`/`false`)          |
 
 ## 🤝 Contributing
 
 We love contributions! Found a bug? Want a new feature? Open an issue or submit a PR.
 
-## 📝 License
+## � Acknowledgments
+
+DevGen wouldn't be possible without these amazing open-source projects and AI providers:
+
+- **[Typer](https://typer.tiangolo.com/)** & **[Rich](https://rich.readthedocs.io/)** for building the beautiful, intuitive, and responsive CLI interface.
+- **[Questionary](https://github.com/tmbo/questionary)** for creating interactive, user-friendly prompts and selection menus.
+- **[Jinja2](https://jinja.palletsprojects.com/)** for the powerful template engine used to generate files and messages.
+- **[Google Gemini](https://deepmind.google/technologies/gemini/)**, **[OpenAI](https://openai.com/)**, **[Anthropic](https://www.anthropic.com/)**, **[HuggingFace](https://huggingface.co/)**, and **[OpenRouter](https://openrouter.ai/)** for providing the advanced AI models that power the semantic generation features.
+
+## �📝 License
 
 Proudly open source under the [GPL-3.0-or-later](LICENSE) License.
 
