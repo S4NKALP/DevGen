@@ -104,15 +104,52 @@ def configure_logger(
     return logger
 
 
-def get_git_staged_files() -> list[str]:
+def run_git_command(
+    args: list[str],
+    check: bool = True,
+    cwd: Optional[Path] = None,
+    encoding: str = "utf-8",
+    errors: str = "replace",
+) -> str:
+    """
+    Executes a git command and returns the output.
+
+    Args:
+        args: List of command arguments (e.g., ["git", "status"]).
+        check: Whether to raise an exception on non-zero exit code.
+        cwd: Current working directory for the command.
+        encoding: Output encoding.
+        errors: Error handling strategy for encoding.
+
+    Returns:
+        The standard output of the command, stripped of leading/trailing whitespace.
+
+    Raises:
+        subprocess.CalledProcessError: If the command fails and check is True.
+    """
     try:
         res = subprocess.run(
-            ["git", "diff", "--name-only", "--cached"],
+            args,
             capture_output=True,
             text=True,
-            check=True,
+            encoding=encoding,
+            errors=errors,
+            check=check,
+            cwd=cwd,
         )
-        return [f for f in res.stdout.splitlines() if f.strip()]
+        return res.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        # Log the error if a logger is configured, but re-raise
+        # We don't have access to a specific logger here easily without passing it in,
+        # so we rely on the caller to handle logging if needed, or we could log to a default one.
+        # For now, just re-raise as the caller expects.
+        raise e
+
+
+def get_git_staged_files() -> list[str]:
+    try:
+        output = run_git_command(["git", "diff", "--name-only", "--cached"])
+        return [f for f in output.splitlines() if f.strip()]
     except subprocess.CalledProcessError:
         return []
 
@@ -171,6 +208,7 @@ __all__ = [
     "sanitize_ai_commit_message",
     "extract_commit_messages",
     "configure_logger",
+    "run_git_command",
     "get_git_staged_files",
     "read_file_content",
     "delete_file",
