@@ -116,7 +116,15 @@ class CommitEngine:
             f.write(f"# Dry Run: Commit Messages\n_Generated: {ts}_\n\n")
 
     def _log_dry_run(self, group: str, msg: str):
-        """Appends a dry-run entry."""
+        """Appends a dry-run entry and prints to console."""
+        self.console.print(
+            Panel(
+                Markdown(msg),
+                title=f"Dry Run: {group}",
+                border_style="yellow",
+                expand=False,
+            )
+        )
         with self.dry_run_path.open("a", encoding="utf-8") as f:
             f.write(f"## Group: `{group}`\n\n```md\n{msg}\n```\n\n---\n\n")
 
