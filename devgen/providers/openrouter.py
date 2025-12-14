@@ -19,6 +19,9 @@ class OpenrouterProvider:
                 api_key=api_key,
             )
 
+            # Remove debug from kwargs if present
+            kwargs.pop("debug", None)
+
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],

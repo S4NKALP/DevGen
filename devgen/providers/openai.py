@@ -39,6 +39,9 @@ class OpenaiProvider:
             # Add error handling if the client fails to initialize
             raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
+        # Remove debug from kwargs if present
+        kwargs.pop("debug", None)
+
         # 2. Use the modern API syntax: client.chat.completions.create
         response = client.chat.completions.create(
             model=model or self.DEFAULT_MODEL,
