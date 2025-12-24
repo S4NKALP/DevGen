@@ -1,14 +1,11 @@
 Analyze the following git diff for `{{ group_name }}` and generate a semantic commit message.
-Format:
-1. Title: `<type>(<scope>): <summary>` (scope is `{{ group_name }}` or `root`).
-2. Optional short summary.
-3. Bullet points: `New Features`, `Enhancements`, `Bug Fixes`. Use **bold** for section names.
-{% if use_emoji %}
-4. Use emojis (e.g., 🚀, 🐛).
-{% else %}
-4. No emojis.
-{% endif %}
-Output ONLY the message.
+
+Guidelines:
+- Title line: `<type>(<scope>): <summary>` (scope is `{{ group_name }}` or `root`).
+- Optional body: A short summary of why.
+- Details: Bullet points for `New Features`, `Enhancements`, `Bug Fixes`.
+- {{ "Use emojis (🚀, 🐛)." if use_emoji else "No emojis." }}
+- Output ONLY the message itself, without any labels like "Title:" or "Format:".
 
 Diff for `{{ group_name }}`:
 {{ diff_text }}
