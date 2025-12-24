@@ -40,15 +40,15 @@ def sanitize_ai_commit_message(raw_text: str) -> str:
         return ""
 
     lines = raw_text.strip().split("\n")
-    
+
     # Regex for conventional commit header (including optional bolding)
-    # Examples: 
+    # Examples:
     # - feat(root): summary
     # - **fix: bug fix**
     # - chore(deps)!: breaking change
     header_pattern = re.compile(
         r"^(\*\*)?(feat|fix|chore|refactor|docs|style|test|build|ci)(\(.*\))?!?: .*",
-        re.IGNORECASE
+        re.IGNORECASE,
     )
 
     cleaned_lines = []
@@ -70,7 +70,7 @@ def sanitize_ai_commit_message(raw_text: str) -> str:
 
     if cleaned_lines:
         return "\n".join(cleaned_lines).strip()
-    
+
     # Fallback: if no conventional commit header found, just take the first non-empty line
     # to avoid failing completely, but log a warning if possible.
     for line in lines:
