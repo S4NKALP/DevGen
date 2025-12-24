@@ -9,8 +9,8 @@ This document outlines future improvements, features, and technical debt for `de
 - [ ] **Improved Gitignore Detection**: Auto-detect project type (Python, Node, Go) and suggest relevant `.gitignore` templates during `devgen gitignore run`.
 
 ## 🤖 AI & Intelligence
-- [ ] **Custom Prompts**: Allow users to define their own Jinja2 templates for commits in the config file.
-- [ ] **Context-Aware Commits**: Send the manifest file (`package.json`, `pyproject.toml`) to the AI to provide better context for dependency changes.
+- [x] **Custom Prompts**: Allow users to define their own Jinja2 templates for commits in the config file(~/.devgen.yaml).
+- [x] **Context-Aware Commits**: Send the manifest file (`package.json`, `pyproject.toml`) to the AI to provide better context for dependency changes.
 - [ ] **Token Usage Dashboard**: Add a `devgen config tokens` command to estimate or track AI token consumption.
 - [ ] **More Providers**: Add support for **Mistral**, **Cohere**, and **Groq** for faster/cheaper generations.
 

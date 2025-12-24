@@ -20,7 +20,7 @@
 ## ⚡ Why DevGen?
 
 **🧠 AI Brain**
-Semantic commit messages powered by Gemini, OpenAI, Claude, HuggingFace, and OpenRouter. It reads your diffs and understands your code.
+Semantic, context-aware commit messages powered by Gemini, OpenAI, Claude, HuggingFace, and OpenRouter. It reads your diffs, identifies project manifests, and understands your code.
 
 **🚀 Battle Tested**
 Generates **Conventional Commits** and **Semantic Versioning** compliant changelogs that actually make sense.
@@ -47,6 +47,9 @@ uv tool install devgen-cli
 
 # Standard pip install
 pip install devgen-cli
+
+# Enable Shell Completion (bash/zsh/fish)
+devgen --install-completion
 ```
 
 ## 🚀 Quick Start
@@ -80,7 +83,17 @@ devgen commit run --dry-run
 
 # Commit and push in one go
 devgen commit run --push
+
+# Made a mistake? Undo the last AI commit and keep changes staged
+devgen commit undo
 ```
+
+### 🧠 Context Awareness
+DevGen isn't just looking at the code changes; it's looking at the big picture. It automatically detects and analyzes:
+- **Manifests**: `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, etc.
+- **Lock Files**: `uv.lock`, `package-lock.json`, `poetry.lock`, etc.
+
+This allows the AI to understand *exactly* which library versions were updated, leading to hyper-accurate dependency commit messages.
 
 ### 📝 Changelogs & Release Notes
 
@@ -114,7 +127,22 @@ Your settings live in `~/.devgen.yaml`. You can tweak your AI provider, model, a
 | :--------- | :----------------------------------------------------------- |
 | `provider` | `gemini`, `openai`, `anthropic`, `huggingface`, `openrouter` |
 | `model`    | Specific model name (e.g., `gemini-2.5-flash`, `gpt-4o`)     |
-| `emoji`    | Enable/disable gitmojis in commits (`true`/`false`)          |
+| `emoji`           | Enable/disable gitmojis in commits (`true`/`false`)           |
+| `custom_template` | Custom Jinja2 template for commit messages.                   |
+
+### 🎨 Custom Templates
+You can define your own commit message structure in `~/.devgen.yaml`. Use `devgen config info` to see available variables like `{{ group_name }}`, `{{ diff_text }}`, and `{{ context }}`.
+
+Example:
+```yaml
+custom_template: |
+  {{ group_name }}: {{ diff_text }}
+  ---
+  Manifests: {{ context }}
+```
+
+> [!TIP]
+> Use `devgen config info` to see a full list of available variables and a template tip!
 
 ## 🤝 Contributing
 
