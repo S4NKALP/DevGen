@@ -8,9 +8,7 @@ class LicenseGenerator:
     """Generates license files from templates."""
 
     def __init__(self):
-        self.templates_dir = (
-            Path(__file__).parent.parent / "prompt_templates" / "licenses"
-        )
+        self.templates_dir = Path(__file__).parent.parent / "templates" / "licenses"
 
     def list_licenses(self) -> List[Dict[str, str]]:
         """Lists available license templates."""

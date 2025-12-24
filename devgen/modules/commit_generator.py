@@ -39,7 +39,6 @@ IGNORE_PATTERNS = [
 ]
 
 
-
 class CommitEngine:
     """
     Engine for generating AI-powered commit messages.
@@ -98,11 +97,11 @@ class CommitEngine:
                 ]
             )
             files = [f.strip() for f in out.split("\n") if f.strip()]
-            
+
             # Also get staged files (in case of a previous failed run)
             staged_out = run_git_command(["git", "diff", "--name-only", "--cached"])
             staged_files = [f.strip() for f in staged_out.split("\n") if f.strip()]
-            
+
             # Combine and deduplicate
             all_files = list(set(files + staged_files))
             return all_files

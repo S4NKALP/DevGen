@@ -120,7 +120,7 @@ class ChangelogGenerator:
     ) -> str:
         """Generates markdown changelog from parsed commits."""
         date_str = datetime.now().strftime("%Y-%m-%d")
-        md = [f"# {version} ({date_str})\n"]
+        md = [f"## {version} ({date_str})\n"]
 
         # Order: Breaking, Features, Fixes, Docs, Others
         order = [
@@ -163,14 +163,19 @@ class ChangelogGenerator:
 
         if output_file:
             path = Path(output_file)
-            # If file exists, prepend? For now, just overwrite or append logic could be complex.
-            # Let's implement prepend logic if file exists.
             if path.exists():
                 old_content = path.read_text(encoding="utf-8")
-                new_content = old_content + "\n\n" + md_content
+                # Prepend the new content, assume # CHANGELOG is at the top or needs to be
+                if old_content.strip().startswith("# CHANGELOG"):
+                    lines = old_content.split("\n", 1)
+                    header = lines[0]
+                    rest = lines[1] if len(lines) > 1 else ""
+                    new_content = f"{header}\n\n{md_content}\n{rest.lstrip()}"
+                else:
+                    new_content = f"# CHANGELOG\n\n{md_content}\n\n{old_content}"
                 path.write_text(new_content, encoding="utf-8")
             else:
-                path.write_text(md_content, encoding="utf-8")
+                path.write_text(f"# CHANGELOG\n\n{md_content}", encoding="utf-8")
 
             self.logger.info(f"Changelog written to {output_file}")
             print(f" Changelog updated: {output_file}")
