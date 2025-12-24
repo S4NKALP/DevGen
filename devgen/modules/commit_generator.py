@@ -13,6 +13,7 @@ from devgen.utils import (
     load_template_env,
     run_git_command,
     sanitize_ai_commit_message,
+    render_custom_template,
 )
 from rich.console import Console
 from rich.panel import Panel
@@ -214,8 +215,51 @@ class CommitEngine:
                     f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
                 )
                 self.logger.error(msg)
+                # Check for "no upstream branch" specifically to give a hint?
+                if "no upstream branch" in msg.lower():
+                    self.console.print(
+                        "[warning]No upstream branch. Skipping push.[/warning]"
+                    )
+                    return
                 raise CommitEngineError(msg) from e
         self.console.print("[bold green]Push successful.[/bold green]")
+
+    def _get_manifest_context(self) -> str:
+        """Finds and reads manifest files to provide context."""
+        manifests = [
+            "pyproject.toml",
+            "package.json",
+            "go.mod",
+            "Cargo.toml",
+            "Gemfile",
+            "requirements.txt",
+            "uv.lock",
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "yarn.lock",
+            "composer.lock",
+            "Gemfile.lock",
+            "poetry.lock",
+        ]
+        found = []
+        for m in manifests:
+            path = Path(m)
+            if path.exists():
+                try:
+                    content = path.read_text(encoding="utf-8")
+                    # Take only first 100 lines to avoid token bloat
+                    lines = content.splitlines()
+                    summary = "\n".join(lines[:100])
+                    if len(lines) > 100:
+                        summary += "\n... (truncated)"
+                    found.append(f"File: {m}\n---\n{summary}\n---")
+                except Exception:
+                    continue
+
+        if not found:
+            return ""
+
+        return "\n\n### Project Context (Manifests)\n" + "\n".join(found)
 
     def generate_message(self, group: str, diff: str, cache: Dict[str, str]) -> str:
         """Generates a commit message using AI or cache."""
@@ -230,9 +274,33 @@ class CommitEngine:
         model = self.kwargs.get("model") or self.config.get("model") or self.model
         api_key = self.kwargs.get("api_key") or self.config.get("api_key")
         use_emoji = self.config.get("emoji", True)
+        custom_template = self.config.get("custom_template")
 
-        template = self.template_env.get_template("commit_message.j2")
-        prompt = template.render(group_name=group, diff_text=diff, use_emoji=use_emoji)
+        manifest_context = self._get_manifest_context()
+        if manifest_context:
+            self.logger.info("Including manifest context in prompt")
+
+        if custom_template:
+            self.logger.info("Using custom template from config")
+            prompt = render_custom_template(
+                custom_template,
+                group_name=group,
+                diff_text=diff,
+                use_emoji=use_emoji,
+                context=manifest_context,
+            )
+        else:
+            template = self.template_env.get_template("commit_message.j2")
+            prompt = template.render(
+                group_name=group,
+                diff_text=diff,
+                use_emoji=use_emoji,
+                context=manifest_context,
+            )
+
+        # Automatically append emoji instruction based on global setting
+        emoji_instr = "Use emojis (🚀, 🐛)." if use_emoji else "No emojis."
+        prompt = f"{prompt.strip()}\n\n- {emoji_instr}"
 
         with self.console.status("[bold blue]Generating commit message...[/bold blue]"):
             raw = generate_with_ai(
