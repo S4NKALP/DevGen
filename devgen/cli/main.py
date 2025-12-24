@@ -15,7 +15,7 @@ from devgen.cli.setup import app as setup_app
 app = typer.Typer(
     name="devgen",
     help="devgen-py: AI-Powered Git Commit & Release Automation.",
-    add_completion=False,
+    add_completion=True,
     no_args_is_help=True,
     rich_markup_mode="markdown",
 )

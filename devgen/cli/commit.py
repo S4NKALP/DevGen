@@ -1,5 +1,6 @@
 from typing import Annotated
 
+import questionary
 import typer
 
 from devgen.modules.commit_generator import run_commit_engine
@@ -94,3 +95,26 @@ def validate() -> None:
             typer.echo(f"- {f}")
     else:
         typer.secho("[i] No staged files.", fg=typer.colors.RED)
+
+
+@app.command("undo")
+def undo_commit() -> None:
+    """Undoes the last commit but keeps changes staged."""
+    from devgen.utils import run_git_command
+
+    try:
+        # Check if there's at least one commit
+        run_git_command(["git", "rev-parse", "HEAD"])
+    except Exception:
+        typer.secho("No commits found to undo.", fg=typer.colors.RED)
+        return
+
+    if questionary.confirm(
+        "Are you sure you want to undo the last commit? (Changes will remain staged)",
+        default=False,
+    ).ask():
+        try:
+            run_git_command(["git", "reset", "--soft", "HEAD~1"])
+            typer.secho("Last commit undone. Changes are still staged.", fg=typer.colors.GREEN)
+        except Exception as e:
+            typer.secho(f"Failed to undo commit: {e}", fg=typer.colors.RED)
