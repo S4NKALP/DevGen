@@ -212,6 +212,13 @@ def load_template_env(sub_dir: str) -> Environment:
     return Environment(loader=FileSystemLoader(template_dir))
 
 
+def render_custom_template(template_str: str, **context) -> str:
+    """Renders a Jinja2 template from a string."""
+    env = Environment()
+    template = env.from_string(template_str)
+    return template.render(**context)
+
+
 def load_config() -> Dict[str, Any]:
     config_path = Path.home() / ".devgen.yaml"
 
