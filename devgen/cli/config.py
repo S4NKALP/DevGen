@@ -167,3 +167,30 @@ def set_config() -> None:
     _save_config(config)
     typer.secho("\nConfiguration saved.", fg=typer.colors.GREEN)
     typer.echo(yaml.dump(new_config, default_flow_style=False))
+
+
+@app.command("info")
+def config_info() -> None:
+    """Show information about configuration options and templates."""
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title="Custom Template Variables", box=None)
+    table.add_column("Variable", style="cyan")
+    table.add_column("Description", style="white")
+
+    table.add_row("{{ group_name }}", "The folder name being committed (or 'root').")
+    table.add_row("{{ diff_text }}", "The git diff of the changes.")
+    table.add_row("{{ context }}", "Project context (manifest files content).")
+
+    console.print(table)
+    console.print(
+        "\n[bold]Tip:[/bold] If you hardcode emojis in your template, the AI will likely include them regardless of the 'emoji' setting.",
+        style="yellow",
+    )
+    console.print("\n[bold]Example Template:[/bold]")
+    console.print(
+        "custom_template: |\n  [type]: [desc]\n  \n  Diff: {{ diff_text }}\n",
+        style="dim",
+    )

@@ -115,6 +115,8 @@ def undo_commit() -> None:
     ).ask():
         try:
             run_git_command(["git", "reset", "--soft", "HEAD~1"])
-            typer.secho("Last commit undone. Changes are still staged.", fg=typer.colors.GREEN)
+            typer.secho(
+                "Last commit undone. Changes are still staged.", fg=typer.colors.GREEN
+            )
         except Exception as e:
             typer.secho(f"Failed to undo commit: {e}", fg=typer.colors.RED)
