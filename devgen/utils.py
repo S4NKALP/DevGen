@@ -31,25 +31,53 @@ def is_file_recent(file_path: Path | str, max_age_minutes: int = 120) -> bool:
 
 
 def sanitize_ai_commit_message(raw_text: str) -> str:
+    """
+    Cleans up the AI-generated commit message.
+    It looks for a conventional commit header and extracts everything from there.
+    It handles bolded headers and common AI prefixes.
+    """
+    if not raw_text:
+        return ""
+
     lines = raw_text.strip().split("\n")
-    cleaned_lines = []
-    in_block = False
-    # Regex for conventional commit header
+    
+    # Regex for conventional commit header (including optional bolding)
+    # Examples: 
+    # - feat(root): summary
+    # - **fix: bug fix**
+    # - chore(deps)!: breaking change
     header_pattern = re.compile(
-        r"^(feat|fix|chore|refactor|docs|style|test|build|ci)(\(.*\))?!?: .*"
+        r"^(\*\*)?(feat|fix|chore|refactor|docs|style|test|build|ci)(\(.*\))?!?: .*",
+        re.IGNORECASE
     )
+
+    cleaned_lines = []
+    found_header = False
 
     for line in lines:
         stripped = line.strip()
-        if in_block:
-            if header_pattern.match(stripped) or "**Sponsor**" in line:
+        if not found_header:
+            if header_pattern.match(stripped):
+                found_header = True
+                # Remove bolding if present
+                clean_line = stripped.replace("**", "").strip()
+                cleaned_lines.append(clean_line)
+        else:
+            # If we hit another header or a known separator, we stop (optional, but keep for now)
+            if "**Sponsor**" in line:
                 break
             cleaned_lines.append(line)
-        elif header_pattern.match(stripped):
-            in_block = True
-            cleaned_lines.append(line)
 
-    return "\n".join(cleaned_lines).strip() if cleaned_lines else ""
+    if cleaned_lines:
+        return "\n".join(cleaned_lines).strip()
+    
+    # Fallback: if no conventional commit header found, just take the first non-empty line
+    # to avoid failing completely, but log a warning if possible.
+    for line in lines:
+        if line.strip():
+            return line.strip()
+
+    return ""
 
 
 def parse_markdown_sections(

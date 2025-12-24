@@ -26,6 +26,20 @@ class CommitEngineError(Exception):
     pass
 
 
+# Token Optimization Constants
+MAX_DIFF_SIZE = 8000  # Maximum characters for a single group diff
+IGNORE_PATTERNS = [
+    "uv.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "composer.lock",
+    "Gemfile.lock",
+    "poetry.lock",
+]
+
+
+
 class CommitEngine:
     """
     Engine for generating AI-powered commit messages.
@@ -72,6 +86,7 @@ class CommitEngine:
     def detect_changes(self) -> List[str]:
         """Detects changed, deleted, or untracked files."""
         try:
+            # Get modified, deleted and untracked files
             out = run_git_command(
                 [
                     "git",
@@ -82,7 +97,15 @@ class CommitEngine:
                     "--exclude-standard",
                 ]
             )
-            return [f.strip() for f in out.split("\n") if f.strip()]
+            files = [f.strip() for f in out.split("\n") if f.strip()]
+            
+            # Also get staged files (in case of a previous failed run)
+            staged_out = run_git_command(["git", "diff", "--name-only", "--cached"])
+            staged_files = [f.strip() for f in staged_out.split("\n") if f.strip()]
+            
+            # Combine and deduplicate
+            all_files = list(set(files + staged_files))
+            return all_files
         except subprocess.CalledProcessError as e:
             msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
             self.logger.error(msg)
@@ -98,11 +121,38 @@ class CommitEngine:
         return groups
 
     def generate_diff(self, files: List[str]) -> str:
-        """Generates diff for specific files."""
+        """Generates diff for specific files, with truncation for token optimization."""
         try:
-            return run_git_command(
-                ["git", "--no-pager", "diff", "--staged", "--", *files]
-            )
+            # Filter out very large metadata files that don't need full diffs
+            summary_info = []
+            files_to_diff = []
+            for f in files:
+                if any(p in f for p in IGNORE_PATTERNS):
+                    summary_info.append(f"[METADATA UPDATED] {f}")
+                else:
+                    files_to_diff.append(f)
+
+            diff = ""
+            if files_to_diff:
+                diff = run_git_command(
+                    ["git", "--no-pager", "diff", "--staged", "--", *files_to_diff]
+                )
+
+            full_content = "\n".join(summary_info + [diff]).strip()
+
+            # Truncate if too large
+            if len(full_content) > MAX_DIFF_SIZE:
+                self.logger.info(
+                    f"Truncating diff from {len(full_content)} to {MAX_DIFF_SIZE} chars"
+                )
+                half = MAX_DIFF_SIZE // 2
+                return (
+                    full_content[:half]
+                    + "\n\n... [DIFF TRUNCATED FOR TOKEN OPTIMIZATION] ...\n\n"
+                    + full_content[-half:]
+                )
+
+            return full_content
         except subprocess.CalledProcessError as e:
             msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
             self.logger.error(msg)
@@ -239,20 +289,30 @@ class CommitEngine:
             return True
 
         msg = self.generate_message(group, diff, cache)
-        if not msg:
-            self.logger.error(f"Empty message for {group}")
+        try:
+            if not msg:
+                self.logger.error(f"Empty message for {group}")
+                self._reset_group(files)
+                return False
+
+            if self.dry_run:
+                self._log_dry_run(group, msg)
+                self._reset_group(files)
+            else:
+                self.commit_staged(msg)
+
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to process group {group}: {e}")
+            self._reset_group(files)
             return False
 
-        if self.dry_run:
-            self._log_dry_run(group, msg)
-            try:
-                run_git_command(["git", "reset", "HEAD", "--", *files])
-            except subprocess.CalledProcessError:
-                pass
-        else:
-            self.commit_staged(msg)
-
-        return True
+    def _reset_group(self, files: List[str]):
+        """Unstages files for a group."""
+        try:
+            run_git_command(["git", "reset", "HEAD", "--", *files])
+        except subprocess.CalledProcessError:
+            pass  # Ignore reset errors
 
     def execute(self):
         """Main execution method."""
