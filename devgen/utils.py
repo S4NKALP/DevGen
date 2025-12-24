@@ -57,13 +57,23 @@ def sanitize_ai_commit_message(raw_text: str) -> str:
     for line in lines:
         stripped = line.strip()
         if not found_header:
-            if header_pattern.match(stripped):
+            # First, strip bolding if it wraps the whole line or parts of it
+            # This is simpler than handling it in the regex
+            candidate = stripped.replace("**", "").strip()
+
+            # Clean the line by removing labels like "1. Title:", "### Message:", etc.
+            clean_line = re.sub(
+                r"^(#+\s+)?(\d+\.?|\*|-)?\s*(Title|Commit Message|Message):\s*",
+                "",
+                candidate,
+                flags=re.IGNORECASE,
+            ).strip()
+
+            if header_pattern.match(clean_line):
                 found_header = True
-                # Remove bolding if present
-                clean_line = stripped.replace("**", "").strip()
                 cleaned_lines.append(clean_line)
         else:
-            # If we hit another header or a known separator, we stop (optional, but keep for now)
+            # If we hit another header or a known separator, we stop
             if "**Sponsor**" in line:
                 break
             cleaned_lines.append(line)
