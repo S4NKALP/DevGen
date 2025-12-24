@@ -4,8 +4,8 @@ Guidelines:
 - Title line: `<type>(<scope>): <summary>` (scope is `{{ group_name }}` or `root`).
 - Optional body: A short summary of why.
 - Details: Bullet points for `New Features`, `Enhancements`, `Bug Fixes`.
-- {{ "Use emojis (🚀, 🐛)." if use_emoji else "No emojis." }}
 - Output ONLY the message itself, without any labels like "Title:" or "Format:".
 
 Diff for `{{ group_name }}`:
 {{ diff_text }}
+{{ context }}
