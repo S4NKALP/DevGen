@@ -228,6 +228,7 @@ def load_config() -> Dict[str, Any]:
             "model": "gemini-2.5-flash",
             "api_key": "",
             "emoji": True,
+            "max_groups": 5,
         }
         try:
             with config_path.open("w", encoding="utf-8") as f:
