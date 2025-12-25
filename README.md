@@ -84,6 +84,9 @@ devgen commit run --dry-run
 # Commit and push in one go
 devgen commit run --push
 
+# Review and edit AI messages before committing
+devgen commit run --check
+
 # Made a mistake? Undo the last AI commit and keep changes staged
 devgen commit undo
 ```

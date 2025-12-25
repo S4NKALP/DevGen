@@ -1,3 +1,5 @@
+import sys
+import questionary
 import subprocess
 from collections import defaultdict
 from datetime import datetime
@@ -52,6 +54,7 @@ class CommitEngine:
         push: bool = False,
         debug: bool = False,
         force_rebuild: bool = False,
+        check: bool = False,
         provider: str = "gemini",
         model: str = "gemini-2.5-flash",
         logger: Any | None = None,
@@ -61,6 +64,7 @@ class CommitEngine:
         self.push = push
         self.debug = debug
         self.force_rebuild = force_rebuild
+        self.check = check
         self.provider = provider
         self.model = model
         self.logger = logger or configure_logger(
@@ -112,13 +116,44 @@ class CommitEngine:
             raise CommitEngineError(msg) from e
 
     def group_files(self, files: List[str]) -> Dict[str, List[str]]:
-        """Groups files by their parent directory."""
+        """Groups files by their parent directory with smart merging if limit is exceeded."""
+        max_groups = self.config.get("max_groups", 5)
+
+        # 1. Initial grouping by immediate parent
         groups = defaultdict(list)
         for f in files:
             parent = str(Path(f).parent)
             key = "root" if parent == "." else parent
             groups[key].append(f)
-        return groups
+
+        if len(groups) <= max_groups:
+            return dict(groups)
+
+        self.logger.info(
+            f"Too many groups ({len(groups)}). Merging based on max_groups={max_groups}"
+        )
+
+        # 2. Iteratively merge the deepest group into its parent until we hit the limit
+        while len(groups) > max_groups:
+            # Find the deepest path among the current group keys
+            # Skip 'root' as it's the top level
+            potential_merges = [k for k in groups.keys() if k != "root"]
+            if not potential_merges:
+                # This could happen if only 'root' is left or if max_groups is very small
+                break
+
+            # Deepest path is the one with the most segments
+            deepest = max(potential_merges, key=lambda p: len(Path(p).parts))
+
+            # Find the parent of this deepest path
+            parent_path = str(Path(deepest).parent)
+            new_key = "root" if parent_path == "." else parent_path
+
+            # Merge files into the new key
+            self.logger.debug(f"Merging group '{deepest}' into '{new_key}'")
+            groups[new_key].extend(groups.pop(deepest))
+
+        return dict(groups)
 
     def generate_diff(self, files: List[str]) -> str:
         """Generates diff for specific files, with truncation for token optimization."""
@@ -366,6 +401,42 @@ class CommitEngine:
                 self._log_dry_run(group, msg)
                 self._reset_group(files)
             else:
+                if self.check:
+                    self.console.print(
+                        Panel(
+                            Markdown(msg),
+                            title=f"Proposed Commit Message [group: {group}]",
+                            border_style="cyan",
+                        )
+                    )
+                    choice = questionary.select(
+                        "How would you like to proceed?",
+                        choices=[
+                            "Confirm",
+                            "Edit",
+                            "Abort",
+                        ],
+                        default="Confirm",
+                    ).ask()
+
+                    if not choice or choice == "Abort":
+                        self.logger.info(f"Commit aborted by user at group {group}")
+                        self._reset_group(files)
+                        raise KeyboardInterrupt("User aborted")
+
+                    if choice == "Edit":
+                        msg = questionary.text(
+                            "Edit commit message:",
+                            multiline=True,
+                            default=msg,
+                        ).ask()
+                        if not msg:
+                            self.logger.info(
+                                f"Empty edit, commit cancelled for {group}"
+                            )
+                            self._reset_group(files)
+                            return True
+
                 self.commit_staged(msg)
 
             return True
@@ -428,6 +499,9 @@ def run_commit_engine(**kwargs):
     try:
         engine = CommitEngine(**kwargs)
         engine.execute()
+    except KeyboardInterrupt:
+        logger.warning("Interrupted by user. Exiting...")
+        sys.exit(0)
     except Exception as e:
         logger.error(f"Commit engine failed: {e}", exc_info=True)
 

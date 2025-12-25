@@ -51,12 +51,19 @@ def run_commit(
             help="Force regeneration of commit messages.",
         ),
     ] = False,
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Review/edit commit message before committing.",
+        ),
+    ] = False,
 ) -> None:
     log_file = get_main_log_path()
     logger = configure_logger("devgen.cli.commit", log_file, console=debug)
     logger.info(f"Log file: {log_file}")
     logger.info(
-        f"Options: dry_run={dry_run}, push={push}, debug={debug}, force={force_rebuild}"
+        f"Options: dry_run={dry_run}, push={push}, debug={debug}, force={force_rebuild}, check={check}"
     )
 
     run_commit_engine(
@@ -64,6 +71,7 @@ def run_commit(
         push=push,
         debug=debug,
         force_rebuild=force_rebuild,
+        check=check,
         logger=logger,
     )
 

@@ -4,7 +4,7 @@ This document outlines future improvements, features, and technical debt for `de
 
 ## 🚀 Priority: Short-Term (Reliability & DX)
 - [ ] **Full Test Suite**: Implement `pytest` for all modules, especially `commit_generator` and `utils`.
-- [ ] **Interactive Commit Review**: Add a `--check` flag to `devgen commit run` that allows users to approve/edit the AI message before committing.
+- [x] **Interactive Commit Review**: Add a `--check` flag to `devgen commit run` that allows users to approve/edit the AI message before committing.
 - [ ] **Project-Level Config**: Support `.devgen.yaml` in the repository root that overrides global `~/.devgen.yaml`.
 - [ ] **Improved Gitignore Detection**: Auto-detect project type (Python, Node, Go) and suggest relevant `.gitignore` templates during `devgen gitignore run`.
 
@@ -18,7 +18,7 @@ This document outlines future improvements, features, and technical debt for `de
 - [ ] **Pre-commit Hook Integration**: Provide a command to easily install `devgen` as a pre-commit hook.
 - [x] **Shell Completion**: Implement `typer` shell completion for `bash`, `zsh`, and `fish`.
 - [x] **Commit Undo**: `devgen commit undo` to easily revert the last AI-generated commit and unstage files.
-- [ ] **Multi-Group Commits**: Better handling of repositories where changes are spread across many unrelated directories.
+- [x] **Multi-Group Commits**: Better handling of repositories where changes are spread across many unrelated directories.
 
 ## 🏗️ Refactoring & Technical Debt
 - [ ] **Code Split**: Move CLI logic out of `devgen/cli` into separate service classes to improve testability.
