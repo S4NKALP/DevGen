@@ -466,10 +466,15 @@ class CommitEngine:
             groups = self.group_files(files)
             cache = self.load_cache()
 
-            for group, group_files in groups.items():
+            for i, (group, group_files) in enumerate(groups.items()):
                 try:
                     if not self.process_group(group, group_files, cache):
                         failed.append(group)
+                    # Add a small delay between groups to respect RPM limits if not at the last group
+                    if len(groups) > 1 and i < len(groups) - 1:
+                        import time
+
+                        time.sleep(15)  # Conservative 15s delay to stay within 4 RPM (Free Tier)
                 except KeyboardInterrupt:
                     self.logger.warning("\nOperation interrupted by user.")
                     raise
