@@ -31,6 +31,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 - **Rich 14.3.3**: For text-based user interfaces.
 - **Uv**: For dependency management and installation.
 - **OpenAI 2.26.0**: For AI model integration.
+- **Anthropic 0.84.0**: For AI model integration.
 
 ## Installation
 Get started with DevGen in seconds using one of the following methods:
