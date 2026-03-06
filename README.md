@@ -33,6 +33,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 - **OpenAI 2.26.0**: For AI model integration.
 - **Anthropic 0.84.0**: For AI model integration.
 - **Ruff 0.15.5**: For code linting and formatting.
+- **Google GenAI 1.66.0**: For AI model integration.
 
 ## Installation
 Get started with DevGen in seconds using one of the following methods:
