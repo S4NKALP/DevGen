@@ -38,7 +38,15 @@ class GeminiProvider:
             except Exception as e:
                 error_msg = str(e).upper()
                 # Check for 429 or ResourceExhausted in common error formats
-                if any(x in error_msg for x in ["429", "RESOURCE_EXHAUSTED", "QUOTA_EXCEEDED", "THROTTLED"]):
+                if any(
+                    x in error_msg
+                    for x in [
+                        "429",
+                        "RESOURCE_EXHAUSTED",
+                        "QUOTA_EXCEEDED",
+                        "THROTTLED",
+                    ]
+                ):
                     if attempt < max_retries:
                         delay = base_delay * (2**attempt)
                         print(
