@@ -30,6 +30,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 - **AI Models**: From Google Gemini, OpenAI, Anthropic, HuggingFace, and OpenRouter.
 - **Rich 14.3.3**: For text-based user interfaces.
 - **Uv**: For dependency management and installation.
+- **OpenAI 2.26.0**: For AI model integration.
 
 ## Installation
 Get started with DevGen in seconds using one of the following methods:
@@ -98,15 +99,18 @@ For more detailed API information and available commands, please refer to the [D
 ## Contributing
 We welcome contributions! Found a bug? Want a new feature? Open an issue or submit a PR.
 
+## Troubleshooting
+If you encounter any issues, please refer to our [Troubleshooting Guide](https://devgen.readthedocs.io/en/latest/troubleshooting.html).
+
+## License
+Proudly open source under the [GPL-3.0-or-later](LICENSE) License.
+
 ## Acknowledgments
 DevGen wouldn't be possible without these amazing open-source projects and AI providers:
 - **Typer** & **Rich** for the CLI interface.
 - **Questionary** for interactive prompts.
 - **Jinja2** for the template engine.
 - **Google Gemini**, **OpenAI**, **Anthropic**, **HuggingFace**, and **OpenRouter** for the AI models.
-
-## License
-Proudly open source under the [GPL-3.0-or-later](LICENSE) License.
 
 <div align="center">
 Made with ❤️ by <a href="https://github.com/S4NKALP">Sankalp</a>
