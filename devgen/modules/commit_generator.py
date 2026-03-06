@@ -474,7 +474,9 @@ class CommitEngine:
                     if len(groups) > 1 and i < len(groups) - 1:
                         import time
 
-                        time.sleep(15)  # Conservative 15s delay to stay within 4 RPM (Free Tier)
+                        time.sleep(
+                            15
+                        )  # Conservative 15s delay to stay within 4 RPM (Free Tier)
                 except KeyboardInterrupt:
                     self.logger.warning("\nOperation interrupted by user.")
                     raise
