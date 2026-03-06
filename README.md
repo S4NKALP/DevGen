@@ -29,6 +29,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 - **Jinja2**: For the powerful template engine.
 - **AI Models**: From Google Gemini, OpenAI, Anthropic, HuggingFace, and OpenRouter.
 - **Rich 14.3.3**: For text-based user interfaces.
+- **Uv**: For dependency management and installation.
 
 ## Installation
 Get started with DevGen in seconds using one of the following methods:
