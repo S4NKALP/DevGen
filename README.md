@@ -7,6 +7,8 @@
 <a href="https://pypi.org/project/devgen-cli"><img src="https://img.shields.io/pypi/v/devgen-cli?color=blue&label=PyPI&logo=pypi&logoColor=white" alt="PyPI"></a>
 <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python">
 <a href="https://github.com/S4NKALP/DevGen/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg" alt="License"></a>
+<a href="https://github.com/S4NKALP/DevGen/actions/workflows/publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/S4NKALP/DevGen/publish.yml?branch=main&label=Build" alt="Build Status"></a>
+<a href="https://github.com/S4NKALP/DevGen/actions/workflows/pre-commit.yml"><img src="https://img.shields.io/github/actions/workflow/status/S4NKALP/DevGen/pre-commit.yml?branch=main&label=Pre-Commit" alt="Pre-Commit Status"></a>
 </div>
 
 ## Overview
@@ -26,6 +28,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 - **Questionary**: For interactive prompts and selection menus.
 - **Jinja2**: For the powerful template engine.
 - **AI Models**: From Google Gemini, OpenAI, Anthropic, HuggingFace, and OpenRouter.
+- **Rich 14.3.3**: For text-based user interfaces.
 
 ## Installation
 Get started with DevGen in seconds using one of the following methods:
