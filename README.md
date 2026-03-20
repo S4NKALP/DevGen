@@ -35,7 +35,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 - **AI Models**: From Google Gemini, OpenAI, Anthropic, HuggingFace, and OpenRouter.
 - **Rich 14.3.3**: For text-based user interfaces.
 - **Uv**: For dependency management and installation.
-- **OpenAI 2.26.0**: For AI model integration.
+- **OpenAI 2.29.0**: For AI model integration.
 - **Anthropic 0.86.0**: For AI model integration.
 - **Ruff 0.15.7**: For code linting and formatting.
 - **Google GenAI 1.68.0**: For AI model integration.
