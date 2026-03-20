@@ -117,6 +117,21 @@ For more detailed API information and available commands, please refer to the [D
 
 We welcome contributions! Found a bug? Want a new feature? Open an issue or submit a PR.
 
+## Development
+
+To set up the development environment, follow these steps:
+
+1. Clone the repository: `git clone https://github.com/S4NKALP/DevGen.git`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run tests: `pytest`
+
+## Deployment
+
+To deploy DevGen, follow these steps:
+
+1. Build the package: `python setup.py sdist`
+2. Upload to PyPI: `twine upload dist/*`
+
 ## Troubleshooting
 
 If you encounter any issues, please refer to our [Troubleshooting Guide](https://devgen.readthedocs.io/en/latest/troubleshooting.html).
