@@ -209,6 +209,11 @@ def delete_file(filepath: Path | str) -> bool:
 
 def load_template_env(sub_dir: str) -> Environment:
     template_dir = Path(__file__).parent / "templates" / sub_dir
+    if not template_dir.is_dir():
+        raise RuntimeError(
+            f"Template directory not found: {template_dir}. "
+            "The installation may be corrupted."
+        )
     return Environment(loader=FileSystemLoader(template_dir))
 
 

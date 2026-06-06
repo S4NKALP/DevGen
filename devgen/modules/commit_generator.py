@@ -48,6 +48,7 @@ class CacheManager:
 
     def __init__(self, path: Path, max_age_minutes: int = 120) -> None:
         self.path = path
+        self.max_age_minutes = max_age_minutes
 
     def init_dry_run(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,7 +60,7 @@ class CacheManager:
         if dry_run:
             self.init_dry_run()
             return {}
-        if not force_rebuild and is_file_recent(self.path):
+        if not force_rebuild and is_file_recent(self.path, self.max_age_minutes):
             return extract_commit_messages(self.path)
         return {}
 

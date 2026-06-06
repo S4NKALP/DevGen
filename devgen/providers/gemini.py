@@ -30,7 +30,7 @@ class GeminiProvider(BaseProvider):
                         max_output_tokens=kwargs.get("max_output_tokens", 2048),
                     ),
                 )
-                return response.text
+                return response.text or ""
             except Exception as e:
                 if is_token_limit_error(e):
                     raise  # base class handles with friendly message

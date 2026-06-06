@@ -85,14 +85,14 @@ def setup_config() -> None:
             raise typer.Exit(code=130)
         ollama_host = ollama_host_input.strip() or ollama_host
 
-    # Save Config
-    new_config = {
+    # Save Config — merge with existing to preserve extra keys
+    new_config = {**current_config, **{
         "provider": provider,
         "model": model,
         "api_key": api_key,
         "emoji": emoji,
         "ollama_host": ollama_host,
-    }
+    }}
 
     try:
         with config_path.open("w", encoding="utf-8") as f:

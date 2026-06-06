@@ -70,7 +70,7 @@ class DiffBuilder:
     def _partition(self, files: List[str]) -> tuple[list[str], list[str]]:
         summary, to_diff = [], []
         for f in files:
-            if any(p in f for p in IGNORED_DIFF_PATTERNS):
+            if Path(f).name in IGNORED_DIFF_PATTERNS:
                 summary.append(f"[METADATA UPDATED] {f}")
             else:
                 to_diff.append(f)
@@ -128,7 +128,11 @@ class FileGrouper:
             deepest = max(candidates, key=lambda p: len(Path(p).parts))
             parent_path = str(Path(deepest).parent)
             new_key = "root" if parent_path == "." else parent_path
-            groups.setdefault(new_key, []).extend(groups.pop(deepest))
+            files = groups.pop(deepest)
+            if new_key in groups:
+                groups[new_key].extend(files)
+            else:
+                groups["root"].extend(files)
         return groups
 
 

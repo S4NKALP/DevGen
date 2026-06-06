@@ -115,8 +115,11 @@ class GitOperator:
                 self._run(["git", "add", *existing])
             if deleted:
                 self._run(["git", "rm", *deleted])
-        except GitError as e:
-            raise GitError(f"Could not stage files: {e}") from e
+        except GitError:
+            # Fallback: file state may have changed between check and command.
+            # Try a single git add --all for the whole set; git will handle
+            # both additions and removals correctly.
+            self._run(["git", "add", "--all", "--", *files])
 
     def commit(self, message: str) -> None:
         """``git commit -m`` with the given message."""

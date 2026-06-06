@@ -145,7 +145,7 @@ class ChangelogGenerator:
             old = path.read_text(encoding="utf-8")
             if old.strip().startswith("# CHANGELOG"):
                 header, _, rest = old.partition("\n")
-                new_content = f"{header}\n\n{md_content}\n{rest.lstrip()}"
+                new_content = f"{header}\n\n{md_content}\n{rest}"
             else:
                 new_content = f"# CHANGELOG\n\n{md_content}\n\n{old}"
         else:

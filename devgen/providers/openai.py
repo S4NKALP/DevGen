@@ -17,4 +17,4 @@ class OpenaiProvider(BaseProvider):
             messages=[{"role": "user", "content": prompt}],
             **kwargs,
         )
-        return response.choices[0].message.content
+        return response.choices[0].message.content or ""

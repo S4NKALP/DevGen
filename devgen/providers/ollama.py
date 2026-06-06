@@ -36,7 +36,7 @@ class OllamaProvider(BaseProvider):
                 f"Ollama returned no choices for model {model!r}. "
                 "The model may not be installed locally."
             )
-        return response.choices[0].message.content
+        return response.choices[0].message.content or ""
 
     def _handle_error(self, error):
         """Override default wrapping — Ollama has no API key to check."""

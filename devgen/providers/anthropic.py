@@ -16,4 +16,4 @@ class AnthropicProvider(BaseProvider):
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
-        return message.content[0].text
+        return message.content[0].text or ""

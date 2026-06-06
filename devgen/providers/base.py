@@ -53,7 +53,8 @@ class BaseProvider(ABC):
             )
         chosen_model = model or self.DEFAULT_MODEL
         try:
-            return self._generate(prompt, api_key, chosen_model, **kwargs).strip()
+            text = self._generate(prompt, api_key, chosen_model, **kwargs)
+            return (text or "").strip()
         except Exception as e:
             self._handle_error(e)
 
