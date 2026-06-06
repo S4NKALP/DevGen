@@ -34,14 +34,14 @@ DevGen is a CLI for the parts of development that should be invisible. It writes
 
 ## Supported AI Providers
 
-| Provider | Notes |
-|---|---|
-| **Google Gemini** | Default-friendly, generous free tier |
-| **OpenAI** | GPT-4o, GPT-4.1, o-series |
-| **Anthropic** | Claude 3.5 / 3.7 / 4 |
-| **OpenRouter** | Single key, many models |
-| **HuggingFace** | Inference API |
-| **Ollama** | Fully local, no API key, no data leaves your machine |
+| Provider          | Notes                                                |
+| ----------------- | ---------------------------------------------------- |
+| **Google Gemini** | Default-friendly, generous free tier                 |
+| **OpenAI**        | GPT-4o, GPT-4.1, o-series                            |
+| **Anthropic**     | Claude 3.5 / 3.7 / 4                                 |
+| **OpenRouter**    | Single key, many models                              |
+| **HuggingFace**   | Inference API                                        |
+| **Ollama**        | Fully local, no API key, no data leaves your machine |
 
 ## Installation
 
@@ -80,17 +80,17 @@ devgen commit run --push
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `devgen setup config` | Interactive provider / API key / options wizard |
-| `devgen commit run` | Stage, generate message, commit (optionally `--push`, `--check`, `--dry-run`) |
-| `devgen commit undo` | Undo the last AI commit, keep changes staged |
-| `devgen changelog` | Generate a Conventional Commits changelog from recent history |
-| `devgen release-notes` | Generate release notes for a version range |
-| `devgen gitignore list` | List available GitHub `.gitignore` templates |
-| `devgen gitignore add <name> …` | Add `.gitignore` entries to the current project |
-| `devgen license list` | List available SPDX licenses |
-| `devgen license add <spdx>` | Add a LICENSE file to the current project |
+| Command                         | Description                                                                   |
+| ------------------------------- | ----------------------------------------------------------------------------- |
+| `devgen setup config`           | Interactive provider / API key / options wizard                               |
+| `devgen commit run`             | Stage, generate message, commit (optionally `--push`, `--check`, `--dry-run`) |
+| `devgen commit undo`            | Undo the last AI commit, keep changes staged                                  |
+| `devgen changelog`              | Generate a Conventional Commits changelog from recent history                 |
+| `devgen release-notes`          | Generate release notes for a version range                                    |
+| `devgen gitignore list`         | List available GitHub `.gitignore` templates                                  |
+| `devgen gitignore add <name> …` | Add `.gitignore` entries to the current project                               |
+| `devgen license list`           | List available SPDX licenses                                                  |
+| `devgen license add <spdx>`     | Add a LICENSE file to the current project                                     |
 
 Run `devgen <command> --help` for full options on any subcommand.
 
@@ -142,7 +142,6 @@ Built on the shoulders of:
 
 - **Typer** & **Rich** — CLI and terminal UI
 - **Questionary** — interactive prompts
-- **Jinja2** — template rendering under the hood
 - **Google Gemini**, **OpenAI**, **Anthropic**, **OpenRouter**, **HuggingFace**, and **Ollama** — AI providers
 - **Ruff** — lint and format
 
