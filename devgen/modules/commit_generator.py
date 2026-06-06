@@ -330,6 +330,7 @@ class CommitEngine:
         api_key = self.kwargs.get("api_key") or self.config.get("api_key")
         use_emoji = self.config.get("emoji", True)
         custom_template = self.config.get("custom_template")
+        ollama_host = self.config.get("ollama_host")
 
         manifest_context = self._get_manifest_context()
         if manifest_context:
@@ -358,13 +359,16 @@ class CommitEngine:
         prompt = f"{prompt.strip()}\n\n- {emoji_instr}"
 
         with self.console.status("[bold blue]Generating commit message...[/bold blue]"):
+            call_kwargs = dict(self.kwargs)
+            if ollama_host and provider == "ollama":
+                call_kwargs.setdefault("ollama_host", ollama_host)
             raw = generate_with_ai(
                 prompt,
                 provider=provider,
                 model=model,
                 api_key=api_key,
                 debug=self.debug,
-                **self.kwargs,
+                **call_kwargs,
             )
         return sanitize_ai_commit_message(raw)
 
