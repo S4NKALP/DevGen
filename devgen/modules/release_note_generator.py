@@ -12,11 +12,12 @@ class ReleaseNotesGenerator(ChangelogGenerator):
         "BREAKING CHANGES": "⚠️",
         "Features": "✨",
         "Bug Fixes": "🐛",
+        "Performance": "⚡",
         "Documentation": "📚",
         "Refactor": "♻️",
         "Tests": "✅",
         "Chore": "🔧",
-        "Style": "✨",
+        "Style": "💄",
         "Other Changes": "🧹",
     }
 
@@ -32,7 +33,12 @@ class ReleaseNotesGenerator(ChangelogGenerator):
             "BREAKING CHANGES",
             "Features",
             "Bug Fixes",
+            "Performance",
             "Documentation",
+            "Refactor",
+            "Tests",
+            "Style",
+            "Chore",
             "Other Changes",
         ]
 

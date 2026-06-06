@@ -87,16 +87,16 @@ class ChangelogGenerator:
                     groups["Bug Fixes"].append(entry)
                 elif c_type in ["docs"]:
                     groups["Documentation"].append(entry)
-                elif c_type in [
-                    "style",
-                    "refactor",
-                    "perf",
-                    "test",
-                    "build",
-                    "ci",
-                    "chore",
-                ]:
-                    groups["Other Changes"].append(entry)
+                elif c_type == "perf":
+                    groups["Performance"].append(entry)
+                elif c_type == "refactor":
+                    groups["Refactor"].append(entry)
+                elif c_type == "test":
+                    groups["Tests"].append(entry)
+                elif c_type == "style":
+                    groups["Style"].append(entry)
+                elif c_type in ["build", "ci", "chore"]:
+                    groups["Chore"].append(entry)
                 else:
                     groups["Other Changes"].append(entry)
             else:
@@ -122,12 +122,17 @@ class ChangelogGenerator:
         date_str = datetime.now().strftime("%Y-%m-%d")
         md = [f"## {version} ({date_str})\n"]
 
-        # Order: Breaking, Features, Fixes, Docs, Others
+        # Order: Breaking, Features, Fixes, Docs, Refactor, Perf, Tests, Style, Chore, Others
         order = [
             "BREAKING CHANGES",
             "Features",
             "Bug Fixes",
+            "Performance",
             "Documentation",
+            "Refactor",
+            "Tests",
+            "Style",
+            "Chore",
             "Other Changes",
         ]
 
@@ -135,8 +140,13 @@ class ChangelogGenerator:
             "BREAKING CHANGES": "💥 BREAKING CHANGES",
             "Features": "✨ Features",
             "Bug Fixes": "🐛 Bug Fixes",
+            "Performance": "⚡ Performance",
             "Documentation": "📚 Documentation",
-            "Other Changes": "🔨 Other Changes",
+            "Refactor": "♻️ Refactor",
+            "Tests": "✅ Tests",
+            "Style": "💄 Style",
+            "Chore": "🔧 Chore",
+            "Other Changes": "🧹 Other Changes",
         }
 
         for section in order:

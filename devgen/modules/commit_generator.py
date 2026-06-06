@@ -244,6 +244,26 @@ class CommitEngine:
         self.logger.info("Pushing to remote...")
         with self.console.status("[bold green]Pushing to remote...[/bold green]"):
             try:
+                # Fetch first so a non-fast-forward push fails fast with a
+                # clear message instead of getting rejected by the remote.
+                try:
+                    upstream = run_git_command(
+                        [
+                            "git",
+                            "rev-parse",
+                            "--abbrev-ref",
+                            "--symbolic-full-name",
+                            "@{u}",
+                        ],
+                        check=False,
+                    )
+                    if upstream:
+                        run_git_command(
+                            ["git", "fetch", "origin", upstream], check=False
+                        )
+                except (subprocess.CalledProcessError, CommitEngineError):
+                    pass
+
                 run_git_command(["git", "push"])
             except subprocess.CalledProcessError as e:
                 msg = (
@@ -348,22 +368,38 @@ class CommitEngine:
             )
         return sanitize_ai_commit_message(raw)
 
-    def is_ahead_of_remote(self) -> bool:
-        """Checks if local branch has unpushed commits."""
+    def is_ahead_of_remote(self, fetch: bool = False) -> bool:
+        """Checks if local branch has unpushed commits.
+
+        Args:
+            fetch: When True, refresh remote refs first (call only when you
+                intend to push). Avoids an unconditional network call on
+                every run and a TOCTOU window between fetch and rev-list.
+        """
         try:
-            run_git_command(["git", "fetch", "origin"])
+            upstream = run_git_command(
+                ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+                check=False,
+            )
+        except (subprocess.CalledProcessError, CommitEngineError):
+            upstream = ""
+
+        if not upstream:
+            return False
+
+        if fetch:
+            try:
+                run_git_command(["git", "fetch", "origin", upstream], check=False)
+            except (subprocess.CalledProcessError, CommitEngineError):
+                pass
+
+        try:
             count = run_git_command(
                 ["git", "rev-list", "--count", "@{u}..HEAD"], check=False
             )
-            if count and int(count) > 0:
-                return True
-        except (subprocess.CalledProcessError, CommitEngineError):
-            # Maybe no upstream
-            try:
-                return bool(run_git_command(["git", "rev-parse", "HEAD"], check=False))
-            except subprocess.CalledProcessError:
-                return False
-        return False
+            return bool(count) and int(count) > 0
+        except (subprocess.CalledProcessError, CommitEngineError, ValueError):
+            return False
 
     def load_cache(self) -> Dict[str, str]:
         """Loads dry-run cache."""
@@ -441,7 +477,7 @@ class CommitEngine:
 
             return True
         except Exception as e:
-            self.logger.error(f"Failed to process group {group}: {e}")
+            self.logger.error(f"Failed to process group {group!r}: {e}", exc_info=True)
             self._reset_group(files)
             return False
 
@@ -455,7 +491,9 @@ class CommitEngine:
     def execute(self):
         """Main execution method."""
         files = self.detect_changes()
-        ahead = self.is_ahead_of_remote()
+        # Only consult the remote state if the user actually wants to push.
+        # This avoids a network round-trip on every run and a TOCTOU window.
+        ahead = self.is_ahead_of_remote(fetch=self.push) if self.push else False
 
         if not files and not ahead:
             self.logger.info("Nothing to commit or push.")
