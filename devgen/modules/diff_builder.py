@@ -128,7 +128,7 @@ class FileGrouper:
             deepest = max(candidates, key=lambda p: len(Path(p).parts))
             parent_path = str(Path(deepest).parent)
             new_key = "root" if parent_path == "." else parent_path
-            groups[new_key].extend(groups.pop(deepest))
+            groups.setdefault(new_key, []).extend(groups.pop(deepest))
         return groups
 
 
