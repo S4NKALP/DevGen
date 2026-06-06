@@ -1,0 +1,3 @@
+# Tell GitHub Linguist to skip *.tpl files entirely so they don't
+# inflate language stats (Linguist otherwise maps .tpl -> Go).
+*.tpl linguist-vendored
