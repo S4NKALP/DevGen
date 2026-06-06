@@ -5,189 +5,151 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from devgen.modules.changelog_sections import (
+    DEFAULT_STYLES,
+    Section,
+    section_for_type,
+)
 from devgen.utils import configure_logger, run_git_command
 
 
 class ChangelogGenerator:
     """Generates a changelog from git history using Semantic Release style."""
 
+    #: Conventional commit header: ``type(scope)!: subject``
+    _CC_PATTERN = re.compile(r"^(\w+)(?:\(([^)]+)\))?(!?):\s+(.*)")
+
     def __init__(self, logger=None):
         self.logger = logger or configure_logger("devgen.changelog")
 
+    # ------------------------------------------------------------------ commits
+
     def get_commits(self, from_ref: str = "", to_ref: str = "HEAD") -> List[str]:
-        """Fetches commit messages in the specified range."""
-        range_spec = f"{from_ref}..{to_ref}" if from_ref else to_ref
-        # Format: hash|author|date|subject|body
-        fmt = "%H|%an|%ad|%s|%b"
-        cmd = ["git", "log", f"--format={fmt}", "--date=short", range_spec]
-
-        if not from_ref:
-            # If no start ref, try to find the last tag
-            try:
-                last_tag = run_git_command(["git", "describe", "--tags", "--abbrev=0"])
-                cmd = [
-                    "git",
-                    "log",
-                    f"--format={fmt}",
-                    "--date=short",
-                    f"{last_tag}..HEAD",
-                ]
-                self.logger.info(f"Generating changelog from last tag: {last_tag}")
-            except (RuntimeError, subprocess.CalledProcessError):
-                self.logger.info("No tags found, generating for all commits.")
-                cmd = ["git", "log", f"--format={fmt}", "--date=short"]
-
+        """Fetch commit lines in the requested range."""
+        if from_ref:
+            range_spec = f"{from_ref}..{to_ref}"
+            cmd = self._log_cmd(range_spec)
+        else:
+            cmd = self._resolve_range(to_ref)
         try:
             return run_git_command(cmd).split("\n")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Git command failed: {e}")
-            raise RuntimeError(f"Git command failed: {e}")
+            raise RuntimeError(f"Git command failed: {e}") from e
 
-    def parse_commits(self, raw_commits: List[str]) -> Dict[str, List[Dict]]:
-        """Parses raw commit strings into structured data."""
-        groups = defaultdict(list)
-        # Conventional Commit Regex: type(scope)!: subject
-        cc_pattern = re.compile(r"^(\w+)(?:\(([^)]+)\))?(!?):\s+(.*)")
-
-        for line in raw_commits:
-            if not line.strip():
-                continue
-
-            parts = line.split("|", 4)
-            if len(parts) < 4:
-                continue
-
-            commit_hash, author, date, subject, body = (
-                parts[0],
-                parts[1],
-                parts[2],
-                parts[3],
-                parts[4] if len(parts) > 4 else "",
-            )
-
-            match = cc_pattern.match(subject)
-            if match:
-                c_type, c_scope, breaking, c_subject = match.groups()
-                entry = {
-                    "hash": commit_hash,
-                    "author": author,
-                    "date": date,
-                    "scope": c_scope,
-                    "subject": c_subject,
-                    "body": body,
-                    "breaking": bool(breaking),
-                }
-
-                if breaking:
-                    groups["BREAKING CHANGES"].append(entry)
-
-                if c_type in ["feat", "feature"]:
-                    groups["Features"].append(entry)
-                elif c_type in ["fix", "bug"]:
-                    groups["Bug Fixes"].append(entry)
-                elif c_type in ["docs"]:
-                    groups["Documentation"].append(entry)
-                elif c_type == "perf":
-                    groups["Performance"].append(entry)
-                elif c_type == "refactor":
-                    groups["Refactor"].append(entry)
-                elif c_type == "test":
-                    groups["Tests"].append(entry)
-                elif c_type == "style":
-                    groups["Style"].append(entry)
-                elif c_type in ["build", "ci", "chore"]:
-                    groups["Chore"].append(entry)
-                else:
-                    groups["Other Changes"].append(entry)
-            else:
-                # Non-conventional commits
-                groups["Other Changes"].append(
-                    {
-                        "hash": commit_hash,
-                        "author": author,
-                        "date": date,
-                        "scope": None,
-                        "subject": subject,
-                        "body": body,
-                        "breaking": False,
-                    }
-                )
-
-        return groups
-
-    def generate_markdown(
-        self, groups: Dict[str, List[Dict]], version: str = "Unreleased"
-    ) -> str:
-        """Generates markdown changelog from parsed commits."""
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        md = [f"## {version} ({date_str})\n"]
-
-        # Order: Breaking, Features, Fixes, Docs, Refactor, Perf, Tests, Style, Chore, Others
-        order = [
-            "BREAKING CHANGES",
-            "Features",
-            "Bug Fixes",
-            "Performance",
-            "Documentation",
-            "Refactor",
-            "Tests",
-            "Style",
-            "Chore",
-            "Other Changes",
+    def _log_cmd(self, range_spec: str) -> List[str]:
+        # Format: hash|author|date|subject|body
+        return [
+            "git",
+            "log",
+            "--format=%H|%an|%ad|%s|%b",
+            "--date=short",
+            range_spec,
         ]
 
-        emoji_map = {
-            "BREAKING CHANGES": "💥 BREAKING CHANGES",
-            "Features": "✨ Features",
-            "Bug Fixes": "🐛 Bug Fixes",
-            "Performance": "⚡ Performance",
-            "Documentation": "📚 Documentation",
-            "Refactor": "♻️ Refactor",
-            "Tests": "✅ Tests",
-            "Style": "💄 Style",
-            "Chore": "🔧 Chore",
-            "Other Changes": "🧹 Other Changes",
+    def _resolve_range(self, to_ref: str) -> List[str]:
+        try:
+            last_tag = run_git_command(["git", "describe", "--tags", "--abbrev=0"])
+            self.logger.info(f"Generating changelog from last tag: {last_tag}")
+            return self._log_cmd(f"{last_tag}..HEAD")
+        except (RuntimeError, subprocess.CalledProcessError):
+            self.logger.info("No tags found, generating for all commits.")
+            return ["git", "log", "--format=%H|%an|%ad|%s|%b", "--date=short"]
+
+    # ----------------------------------------------------------------- parsing
+
+    def parse_commits(self, raw_commits: List[str]) -> Dict[Section, List[Dict]]:
+        """Group raw commit lines into :class:`Section` buckets."""
+        groups: Dict[Section, List[Dict]] = defaultdict(list)
+        for line in raw_commits:
+            entry = self._parse_line(line)
+            if entry is None:
+                continue
+            section = section_for_type(entry["type"])
+            entry["section"] = section
+            if entry["breaking"]:
+                groups[Section.BREAKING].append(entry)
+            groups[section].append(entry)
+        return dict(groups)
+
+    def _parse_line(self, line: str) -> Dict | None:
+        if not line.strip():
+            return None
+        parts = line.split("|", 4)
+        if len(parts) < 4:
+            return None
+        commit_hash, author, date, subject = parts[:4]
+        body = parts[4] if len(parts) > 4 else ""
+
+        match = self._CC_PATTERN.match(subject)
+        if match:
+            c_type, c_scope, breaking, c_subject = match.groups()
+            return {
+                "type": c_type,
+                "hash": commit_hash,
+                "author": author,
+                "date": date,
+                "scope": c_scope,
+                "subject": c_subject,
+                "body": body,
+                "breaking": bool(breaking),
+            }
+        return {
+            "type": "",
+            "hash": commit_hash,
+            "author": author,
+            "date": date,
+            "scope": None,
+            "subject": subject,
+            "body": body,
+            "breaking": False,
         }
 
-        for section in order:
-            commits = groups.get(section)
-            if commits:
-                header = emoji_map.get(section, section)
-                md.append(f"## {header}\n")
-                for c in commits:
-                    scope = f"**{c['scope']}**: " if c["scope"] else ""
-                    md.append(f"- {scope}{c['subject']} ({c['hash'][:7]})")
-                md.append("")
+    # ------------------------------------------------------------------ output
 
-        return "\n".join(md)
+    def generate_markdown(
+        self,
+        groups: Dict[Section, List[Dict]],
+        version: str = "Unreleased",
+    ) -> str:
+        """Render groups as a markdown changelog block."""
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        out = [f"## {version} ({date_str})\n"]
+        for section in Section.ordered():
+            commits = groups.get(section)
+            if not commits:
+                continue
+            style = DEFAULT_STYLES[section]
+            out.append(f"## {style.emoji} {style.heading}\n")
+            for c in commits:
+                scope = f"**{c['scope']}**: " if c.get("scope") else ""
+                out.append(f"- {scope}{c['subject']} ({c['hash'][:7]})")
+            out.append("")
+        return "\n".join(out)
 
     def run(self, output_file: Optional[str] = "CHANGELOG.md", from_ref: str = ""):
-        """Main execution method."""
+        """Fetch → parse → write (or print) the changelog."""
         raw_commits = self.get_commits(from_ref)
         if not raw_commits or not raw_commits[0]:
             self.logger.warning("No commits found.")
             return
+        groups = self.parse_commits(raw_commits)
+        md_content = self.generate_markdown(groups)
 
-        parsed = self.parse_commits(raw_commits)
-        md_content = self.generate_markdown(parsed)
-
-        if output_file:
-            path = Path(output_file)
-            if path.exists():
-                old_content = path.read_text(encoding="utf-8")
-                # Prepend the new content, assume # CHANGELOG is at the top or needs to be
-                if old_content.strip().startswith("# CHANGELOG"):
-                    lines = old_content.split("\n", 1)
-                    header = lines[0]
-                    rest = lines[1] if len(lines) > 1 else ""
-                    new_content = f"{header}\n\n{md_content}\n{rest.lstrip()}"
-                else:
-                    new_content = f"# CHANGELOG\n\n{md_content}\n\n{old_content}"
-                path.write_text(new_content, encoding="utf-8")
-            else:
-                path.write_text(f"# CHANGELOG\n\n{md_content}", encoding="utf-8")
-
-            self.logger.info(f"Changelog written to {output_file}")
-            print(f" Changelog updated: {output_file}")
-        else:
+        if not output_file:
             print(md_content)
+            return
+
+        path = Path(output_file)
+        if path.exists():
+            old = path.read_text(encoding="utf-8")
+            if old.strip().startswith("# CHANGELOG"):
+                header, _, rest = old.partition("\n")
+                new_content = f"{header}\n\n{md_content}\n{rest.lstrip()}"
+            else:
+                new_content = f"# CHANGELOG\n\n{md_content}\n\n{old}"
+        else:
+            new_content = f"# CHANGELOG\n\n{md_content}"
+        path.write_text(new_content, encoding="utf-8")
+        self.logger.info(f"Changelog written to {output_file}")
+        print(f" Changelog updated: {output_file}")

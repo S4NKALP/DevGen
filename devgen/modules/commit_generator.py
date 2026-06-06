@@ -1,9 +1,18 @@
-import subprocess
+"""Orchestrates the AI-powered commit flow.
+
+The :class:`CommitEngine` is a thin coordinator. The real work lives in:
+
+* :class:`devgen.modules.git_ops.GitOperator` — all git side-effects
+* :class:`devgen.modules.diff_builder.FileGrouper` — files → commit groups
+* :class:`devgen.modules.diff_builder.DiffBuilder` — staged diff + truncation
+* :class:`devgen.modules.diff_builder.ManifestInspector` — project context
+* :class:`devgen.ai.generate_with_ai` — provider-agnostic AI call
+"""
+
 import sys
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import questionary
 from rich.console import Console
@@ -12,6 +21,13 @@ from rich.panel import Panel
 from rich.theme import Theme
 
 from devgen.ai import generate_with_ai
+from devgen.modules.diff_builder import (
+    DEFAULT_MAX_DIFF_SIZE,
+    DiffBuilder,
+    FileGrouper,
+    ManifestInspector,
+)
+from devgen.modules.git_ops import GitOperator
 from devgen.utils import (
     configure_logger,
     extract_commit_messages,
@@ -19,34 +35,112 @@ from devgen.utils import (
     is_file_recent,
     load_template_env,
     render_custom_template,
-    run_git_command,
     sanitize_ai_commit_message,
 )
 
 
 class CommitEngineError(Exception):
-    """Exception raised for errors in the commit engine."""
-
-    pass
+    """Raised when the commit flow cannot proceed."""
 
 
-# Token Optimization Constants
-MAX_DIFF_SIZE = 8000  # Maximum characters for a single group diff
-IGNORE_PATTERNS = [
-    "uv.lock",
-    "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "composer.lock",
-    "Gemfile.lock",
-    "poetry.lock",
-]
+class CacheManager:
+    """Manages the dry-run cache file at ``~/.cache/devgen/commit_dry_run.md``."""
+
+    def __init__(self, path: Path, max_age_minutes: int = 120) -> None:
+        self.path = path
+
+    def init_dry_run(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S (%Z)")
+        with self.path.open("w", encoding="utf-8") as f:
+            f.write(f"# Dry Run: Commit Messages\n_Generated: {ts}_\n\n")
+
+    def load(self, *, dry_run: bool, force_rebuild: bool) -> Dict[str, str]:
+        if dry_run:
+            self.init_dry_run()
+            return {}
+        if not force_rebuild and is_file_recent(self.path):
+            return extract_commit_messages(self.path)
+        return {}
+
+    def append(self, group: str, message: str) -> None:
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(f"## Group: `{group}`\n\n```md\n{message}\n```\n\n---\n\n")
+
+
+class CommitMessageBuilder:
+    """Renders the prompt and calls the AI provider."""
+
+    def __init__(
+        self,
+        template_env,
+        config: Dict[str, Any],
+        provider: str,
+        model: str,
+        debug: bool = False,
+    ) -> None:
+        self.template_env = template_env
+        self.config = config
+        self.provider = provider
+        self.model = model
+        self.debug = debug
+
+    def build_message(
+        self,
+        group: str,
+        diff: str,
+        manifest_context: str,
+        extra_kwargs: Dict[str, Any],
+    ) -> str:
+        custom_template = self.config.get("custom_template")
+        use_emoji = self.config.get("emoji", True)
+        ollama_host = self.config.get("ollama_host")
+
+        if custom_template:
+            prompt = render_custom_template(
+                custom_template,
+                group_name=group,
+                diff_text=diff,
+                use_emoji=use_emoji,
+                context=manifest_context,
+            )
+        else:
+            prompt = (
+                self.template_env.get_template("commit_message.tpl")
+                .render(
+                    group_name=group,
+                    diff_text=diff,
+                    use_emoji=use_emoji,
+                    context=manifest_context,
+                )
+                .strip()
+            )
+
+        provider = (
+            extra_kwargs.get("provider") or self.config.get("provider") or self.provider
+        )
+        model = extra_kwargs.get("model") or self.config.get("model") or self.model
+        api_key = extra_kwargs.get("api_key") or self.config.get("api_key")
+
+        call_kwargs = dict(extra_kwargs)
+        if ollama_host and provider == "ollama":
+            call_kwargs.setdefault("ollama_host", ollama_host)
+        return generate_with_ai(
+            prompt,
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            debug=self.debug,
+            **call_kwargs,
+        )
 
 
 class CommitEngine:
-    """
-    Engine for generating AI-powered commit messages.
-    Handles detection of changes, grouping, AI generation, and git operations.
+    """Coordinates the AI-powered commit flow.
+
+    The constructor signature is stable (used by ``cli/commit.py``) but
+    most logic now lives in composed objects. The public ``execute()``
+    method remains the single entry point.
     """
 
     def __init__(
@@ -61,8 +155,8 @@ class CommitEngine:
         logger: Any | None = None,
         max_groups: int | None = None,
         max_diff_size: int | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         self.dry_run = dry_run
         self.push = push
         self.debug = debug
@@ -76,532 +170,218 @@ class CommitEngine:
             console=debug,
         )
         self.kwargs = kwargs
-        self.dry_run_path = get_commit_dry_run_path()
-        self.template_env = load_template_env("commit")
-        # CLI flags take precedence over config. Config can still be consulted
-        # in group_files / generate_diff when these are None.
-        self._max_groups_override = max_groups
-        self._max_diff_size_override = max_diff_size
+
+        # CLI flags win over config; config wins over default.
+        from devgen.utils import load_config
+
+        self.config = load_config()
 
         self.console = Console(
             theme=Theme(
                 {"info": "dim cyan", "warning": "magenta", "danger": "bold red"}
             )
         )
-
-        # Load config from ~/.devgen.yaml
-        from devgen.utils import load_config
-
-        self.config = load_config()
-
-    def detect_changes(self) -> List[str]:
-        """Detects changed, deleted, or untracked files."""
-        try:
-            # Get modified, deleted and untracked files
-            out = run_git_command(
-                [
-                    "git",
-                    "ls-files",
-                    "--deleted",
-                    "--modified",
-                    "--others",
-                    "--exclude-standard",
-                ]
-            )
-            files = [f.strip() for f in out.split("\n") if f.strip()]
-
-            # Also get staged files (in case of a previous failed run)
-            staged_out = run_git_command(["git", "diff", "--name-only", "--cached"])
-            staged_files = [f.strip() for f in staged_out.split("\n") if f.strip()]
-
-            # Combine and deduplicate
-            all_files = list(set(files + staged_files))
-            return all_files
-        except subprocess.CalledProcessError as e:
-            msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
-            self.logger.error(msg)
-            raise CommitEngineError(msg) from e
-
-    def group_files(self, files: List[str]) -> Dict[str, List[str]]:
-        """Groups files by their parent directory with smart merging if limit is exceeded."""
-        max_groups = (
-            self._max_groups_override
-            if self._max_groups_override is not None
-            else self.config.get("max_groups", 5)
-        )
-
-        # 1. Initial grouping by immediate parent
-        groups = defaultdict(list)
-        for f in files:
-            parent = str(Path(f).parent)
-            key = "root" if parent == "." else parent
-            groups[key].append(f)
-
-        if len(groups) <= max_groups:
-            return dict(groups)
-
-        self.logger.info(
-            f"Too many groups ({len(groups)}). Merging based on max_groups={max_groups}"
-        )
-
-        # 2. Iteratively merge the deepest group into its parent until we hit the limit
-        while len(groups) > max_groups:
-            # Find the deepest path among the current group keys
-            # Skip 'root' as it's the top level
-            potential_merges = [k for k in groups.keys() if k != "root"]
-            if not potential_merges:
-                # This could happen if only 'root' is left or if max_groups is very small
-                break
-
-            # Deepest path is the one with the most segments
-            deepest = max(potential_merges, key=lambda p: len(Path(p).parts))
-
-            # Find the parent of this deepest path
-            parent_path = str(Path(deepest).parent)
-            new_key = "root" if parent_path == "." else parent_path
-
-            # Merge files into the new key
-            self.logger.debug(f"Merging group '{deepest}' into '{new_key}'")
-            groups[new_key].extend(groups.pop(deepest))
-
-        return dict(groups)
-
-    def generate_diff(self, files: List[str]) -> str:
-        """Generates diff for specific files, with truncation for token optimization."""
-        try:
-            # Filter out very large metadata files that don't need full diffs
-            summary_info = []
-            files_to_diff = []
-            for f in files:
-                if any(p in f for p in IGNORE_PATTERNS):
-                    summary_info.append(f"[METADATA UPDATED] {f}")
-                else:
-                    files_to_diff.append(f)
-
-            diff = ""
-            if files_to_diff:
-                diff = run_git_command(
-                    ["git", "--no-pager", "diff", "--staged", "--", *files_to_diff]
-                )
-
-            full_content = "\n".join(summary_info + [diff]).strip()
-
-            # Truncate if too large
-            max_size = (
-                self._max_diff_size_override
-                if self._max_diff_size_override is not None
-                else self.config.get("max_diff_size", MAX_DIFF_SIZE)
-            )
-            if len(full_content) > max_size:
-                self.logger.info(
-                    f"Truncating diff from {len(full_content)} to {max_size} chars "
-                    f"(config: max_diff_size). If you still hit token-limit errors, "
-                    f"lower this further or split the commit into more groups."
-                )
-                half = max_size // 2
-                return (
-                    full_content[:half]
-                    + "\n\n... [DIFF TRUNCATED FOR TOKEN OPTIMIZATION] ...\n\n"
-                    + full_content[-half:]
-                )
-
-            return full_content
-        except subprocess.CalledProcessError as e:
-            msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
-            self.logger.error(msg)
-            raise CommitEngineError(msg) from e
-
-    def _init_dry_run(self):
-        """Initializes the dry-run file."""
-        self.dry_run_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.dry_run_path.open("w", encoding="utf-8") as f:
-            ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S (%Z)")
-            f.write(f"# Dry Run: Commit Messages\n_Generated: {ts}_\n\n")
-
-    def _log_dry_run(self, group: str, msg: str):
-        """Appends a dry-run entry and prints to console."""
-        self.console.print(
-            Panel(
-                Markdown(msg),
-                title=f"Dry Run: {group}",
-                border_style="yellow",
-                expand=False,
+        self.git = GitOperator(logger=self.logger)
+        self.grouper = FileGrouper(
+            max_groups=(
+                max_groups
+                if max_groups is not None
+                else self.config.get("max_groups", 5)
             )
         )
-        with self.dry_run_path.open("a", encoding="utf-8") as f:
-            f.write(f"## Group: `{group}`\n\n```md\n{msg}\n```\n\n---\n\n")
-
-    def stage_files(self, files: List[str]):
-        """Stages files in git."""
-        if not files:
-            return
-        self.logger.info(f"Staging: {files}")
-        self.console.print(f"[info]Staging {len(files)} files...[/info]")
-        try:
-            run_git_command(["git", "add", *files])
-        except subprocess.CalledProcessError as e:
-            msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
-            self.logger.error(msg)
-            raise CommitEngineError(msg) from e
-
-    def commit_staged(self, msg: str):
-        """Commits staged changes."""
-        self.logger.info(f"Committing:\n{msg}")
-        self.console.print(
-            Panel(Markdown(msg), title="Commit Message", border_style="green")
+        self.diff_builder = DiffBuilder(
+            max_size=(
+                max_diff_size
+                if max_diff_size is not None
+                else self.config.get("max_diff_size", DEFAULT_MAX_DIFF_SIZE)
+            ),
+            logger=self.logger,
         )
-        try:
-            run_git_command(["git", "commit", "-m", msg])
-        except subprocess.CalledProcessError as e:
-            msg = f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
-            self.logger.error(msg)
-            raise CommitEngineError(msg) from e
-
-    def push_commits(self):
-        """Pushes commits to remote."""
-        self.logger.info("Pushing to remote...")
-        with self.console.status("[bold green]Pushing to remote...[/bold green]"):
-            try:
-                # Fetch first so a non-fast-forward push fails fast with a
-                # clear message instead of getting rejected by the remote.
-                try:
-                    upstream = run_git_command(
-                        [
-                            "git",
-                            "rev-parse",
-                            "--abbrev-ref",
-                            "--symbolic-full-name",
-                            "@{u}",
-                        ],
-                        check=False,
-                    )
-                    if upstream:
-                        run_git_command(
-                            ["git", "fetch", "origin", upstream], check=False
-                        )
-                except (subprocess.CalledProcessError, CommitEngineError):
-                    pass
-
-                run_git_command(["git", "push"])
-            except subprocess.CalledProcessError as e:
-                msg = (
-                    f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
-                )
-                self.logger.error(msg)
-                # Check for "no upstream branch" specifically to give a hint?
-                if "no upstream branch" in msg.lower():
-                    self.console.print(
-                        "[warning]No upstream branch. Skipping push.[/warning]"
-                    )
-                    return
-                raise CommitEngineError(msg) from e
-        self.console.print("[bold green]Push successful.[/bold green]")
-
-    def _get_manifest_context(self) -> str:
-        """Return a compact one-line-per-file summary of project manifests.
-
-        Dumping the first 100 lines of pyproject.toml/requirements.txt is
-        extremely wasteful — most of it is build/tool config the model does
-        not need. We extract just the project identity and the package list
-        so the model can write context-aware commit messages.
-        """
-        import json
-        import re
-
-        import toml
-
-        def _pkg_name(spec: str) -> str:
-            return re.split(r"[><=!~\[]", spec, 1)[0].strip()
-
-        def _pyproject() -> str | None:
-            path = Path("pyproject.toml")
-            if not path.exists():
-                return None
-            try:
-                data = toml.load(path)
-            except Exception:
-                return None
-            proj = data.get("project", {}) if isinstance(data, dict) else {}
-            parts = [
-                f"{k}={proj[k]}"
-                for k in ("name", "version", "description")
-                if proj.get(k)
-            ]
-            deps = proj.get("dependencies") or []
-            if deps:
-                names = [n for n in (_pkg_name(d) for d in deps) if n]
-                if names:
-                    parts.append(f"deps={','.join(names)}")
-            return f"[pyproject.toml] {' '.join(parts)}" if parts else None
-
-        def _package_json() -> str | None:
-            path = Path("package.json")
-            if not path.exists():
-                return None
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                return None
-            parts = [
-                f"{k}={data[k]}"
-                for k in ("name", "version", "description")
-                if data.get(k)
-            ]
-            deps = data.get("dependencies") or {}
-            if isinstance(deps, dict) and deps:
-                parts.append(f"deps={','.join(deps.keys())}")
-            return f"[package.json] {' '.join(parts)}" if parts else None
-
-        def _requirements() -> str | None:
-            path = Path("requirements.txt")
-            if not path.exists():
-                return None
-            try:
-                names = [
-                    n
-                    for n in (
-                        _pkg_name(line)
-                        for line in path.read_text(encoding="utf-8").splitlines()
-                    )
-                    if n and not n.startswith("#")
-                ]
-            except Exception:
-                return None
-            return f"[requirements.txt] deps={','.join(names)}" if names else None
-
-        lines = [s for s in (_pyproject(), _package_json(), _requirements()) if s]
-        if not lines:
-            return ""
-        return "\nProject: " + " | ".join(lines)
-
-    def generate_message(self, group: str, diff: str, cache: Dict[str, str]) -> str:
-        """Generates a commit message using AI or cache."""
-        if not self.force_rebuild and group in cache:
-            self.logger.info(f"Using cached message for {group}")
-            return cache[group]
-
-        # Get settings from config or kwargs
-        provider = (
-            self.kwargs.get("provider") or self.config.get("provider") or self.provider
+        self.template_env = load_template_env("commit")
+        self.cache = CacheManager(get_commit_dry_run_path())
+        self.message_builder = CommitMessageBuilder(
+            self.template_env,
+            self.config,
+            provider=self.provider,
+            model=self.model,
+            debug=self.debug,
         )
-        model = self.kwargs.get("model") or self.config.get("model") or self.model
-        api_key = self.kwargs.get("api_key") or self.config.get("api_key")
-        use_emoji = self.config.get("emoji", True)
-        custom_template = self.config.get("custom_template")
-        ollama_host = self.config.get("ollama_host")
 
-        manifest_context = self._get_manifest_context()
-        if manifest_context:
-            self.logger.info("Including manifest context in prompt")
+    # ------------------------------------------------------------------ public
 
-        if custom_template:
-            self.logger.info("Using custom template from config")
-            prompt = render_custom_template(
-                custom_template,
-                group_name=group,
-                diff_text=diff,
-                use_emoji=use_emoji,
-                context=manifest_context,
-            )
-        else:
-            template = self.template_env.get_template("commit_message.tpl")
-            prompt = template.render(
-                group_name=group,
-                diff_text=diff,
-                use_emoji=use_emoji,
-                context=manifest_context,
-            ).strip()
-
-        with self.console.status("[bold blue]Generating commit message...[/bold blue]"):
-            call_kwargs = dict(self.kwargs)
-            if ollama_host and provider == "ollama":
-                call_kwargs.setdefault("ollama_host", ollama_host)
-            raw = generate_with_ai(
-                prompt,
-                provider=provider,
-                model=model,
-                api_key=api_key,
-                debug=self.debug,
-                **call_kwargs,
-            )
-        return sanitize_ai_commit_message(raw)
-
-    def is_ahead_of_remote(self, fetch: bool = False) -> bool:
-        """Checks if local branch has unpushed commits.
-
-        Args:
-            fetch: When True, refresh remote refs first (call only when you
-                intend to push). Avoids an unconditional network call on
-                every run and a TOCTOU window between fetch and rev-list.
-        """
-        try:
-            upstream = run_git_command(
-                ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-                check=False,
-            )
-        except (subprocess.CalledProcessError, CommitEngineError):
-            upstream = ""
-
-        if not upstream:
-            return False
-
-        if fetch:
-            try:
-                run_git_command(["git", "fetch", "origin", upstream], check=False)
-            except (subprocess.CalledProcessError, CommitEngineError):
-                pass
-
-        try:
-            count = run_git_command(
-                ["git", "rev-list", "--count", "@{u}..HEAD"], check=False
-            )
-            return bool(count) and int(count) > 0
-        except (subprocess.CalledProcessError, CommitEngineError, ValueError):
-            return False
-
-    def load_cache(self) -> Dict[str, str]:
-        """Loads dry-run cache."""
-        if self.dry_run:
-            self._init_dry_run()
-            return {}
-        if not self.force_rebuild and is_file_recent(self.dry_run_path):
-            self.logger.info(f"Loading cache from {self.dry_run_path}")
-            return extract_commit_messages(self.dry_run_path)
-        return {}
-
-    def process_group(
-        self, group: str, files: List[str], cache: Dict[str, str]
-    ) -> bool:
-        """Processes a single file group."""
-        self.stage_files(files)
-        diff = self.generate_diff(files)
-
-        if not diff.strip():
-            self.logger.info(f"Skipping empty diff for {group}")
-            try:
-                run_git_command(["git", "reset", "HEAD", "--", *files])
-            except subprocess.CalledProcessError:
-                pass  # Ignore reset errors
-            return True
-
-        msg = self.generate_message(group, diff, cache)
-        try:
-            if not msg:
-                self.logger.error(f"Empty message for {group}")
-                self._reset_group(files)
-                return False
-
-            if self.dry_run:
-                self._log_dry_run(group, msg)
-                self._reset_group(files)
-            else:
-                if self.check:
-                    self.console.print(
-                        Panel(
-                            Markdown(msg),
-                            title=f"Proposed Commit Message [group: {group}]",
-                            border_style="cyan",
-                        )
-                    )
-                    choice = questionary.select(
-                        "How would you like to proceed?",
-                        choices=[
-                            "Confirm",
-                            "Edit",
-                            "Abort",
-                        ],
-                        default="Confirm",
-                    ).ask()
-
-                    if not choice or choice == "Abort":
-                        self.logger.info(f"Commit aborted by user at group {group}")
-                        self._reset_group(files)
-                        raise KeyboardInterrupt("User aborted")
-
-                    if choice == "Edit":
-                        msg = questionary.text(
-                            "Edit commit message:",
-                            multiline=True,
-                            default=msg,
-                        ).ask()
-                        if not msg:
-                            self.logger.info(
-                                f"Empty edit, commit cancelled for {group}"
-                            )
-                            self._reset_group(files)
-                            return True
-
-                self.commit_staged(msg)
-
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to process group {group!r}: {e}", exc_info=True)
-            self._reset_group(files)
-            return False
-
-    def _reset_group(self, files: List[str]):
-        """Unstages files for a group."""
-        try:
-            run_git_command(["git", "reset", "HEAD", "--", *files])
-        except subprocess.CalledProcessError:
-            pass  # Ignore reset errors
-
-    def execute(self):
-        """Main execution method."""
-        files = self.detect_changes()
-        # Only consult the remote state if the user actually wants to push.
-        # This avoids a network round-trip on every run and a TOCTOU window.
-        ahead = self.is_ahead_of_remote(fetch=self.push) if self.push else False
+    def execute(self) -> None:
+        files = self.git.detect_changed()
+        # Only consult the remote state if the user wants to push —
+        # avoids a network round-trip on every run.
+        ahead = self.git.is_ahead_of_remote(fetch=self.push) if self.push else False
 
         if not files and not ahead:
             self.logger.info("Nothing to commit or push.")
             return
 
-        failed = []
+        failed: list[str] = []
         if files:
-            groups = self.group_files(files)
-            cache = self.load_cache()
-
-            for i, (group, group_files) in enumerate(groups.items()):
-                try:
-                    if not self.process_group(group, group_files, cache):
-                        failed.append(group)
-                    # Add a small delay between groups to respect RPM limits if not at the last group
-                    if len(groups) > 1 and i < len(groups) - 1:
-                        import time
-
-                        time.sleep(
-                            15
-                        )  # Conservative 15s delay to stay within 4 RPM (Free Tier)
-                except KeyboardInterrupt:
-                    self.logger.warning("\nOperation interrupted by user.")
-                    raise
-        else:
-            self.logger.info("No changes to commit, checking push...")
+            failed = self._process_groups(files)
 
         if self.push and not self.dry_run:
             if not failed:
-                self.push_commits()
+                self.git.push()
+                self.console.print("[bold green]Push successful.[/bold green]")
             else:
                 self.logger.error("Push aborted due to failed commits.")
 
         if self.dry_run:
             self.console.print(
-                f"[bold green]Dry run done.[/bold green] See {self.dry_run_path}"
+                f"[bold green]Dry run done.[/bold green] See {self.cache.path}"
             )
         else:
             self.console.print("[bold green]Done.[/bold green]")
             if failed:
                 self.console.print(f"[bold red]Failed groups: {failed}[/bold red]")
 
+    # ------------------------------------------------------------------ groups
 
-def run_commit_engine(**kwargs):
-    """Entry point for the commit engine."""
+    def _process_groups(self, files: List[str]) -> list[str]:
+        groups = self.grouper.group(files)
+        cache_map = self.cache.load(
+            dry_run=self.dry_run, force_rebuild=self.force_rebuild
+        )
+        failed: list[str] = []
+        for i, (group, group_files) in enumerate(groups.items()):
+            if not self._process_group(group, group_files, cache_map):
+                failed.append(group)
+            if len(groups) > 1 and i < len(groups) - 1:
+                import time
+
+                time.sleep(15)  # Conservative 4 RPM guard for free-tier
+        return failed
+
+    def _process_group(
+        self,
+        group: str,
+        files: List[str],
+        cache: Dict[str, str],
+    ) -> bool:
+        self.git.stage(files)
+        diff = self.diff_builder.build(files)
+
+        if not diff.strip():
+            self.logger.info(f"Skipping empty diff for {group}")
+            self.git.reset(files)
+            return True
+
+        if not self.force_rebuild and group in cache:
+            self.logger.info(f"Using cached message for {group}")
+            return self._apply_message(group, cache[group], files)
+
+        try:
+            manifest_context = ManifestInspector.summary()
+            if manifest_context:
+                self.logger.info("Including manifest context in prompt")
+            with self.console.status(
+                "[bold blue]Generating commit message...[/bold blue]"
+            ):
+                raw = self.message_builder.build_message(
+                    group=group,
+                    diff=diff,
+                    manifest_context=manifest_context,
+                    extra_kwargs=self.kwargs,
+                )
+            message = sanitize_ai_commit_message(raw)
+        except Exception as e:
+            self.logger.error(
+                f"Failed to generate message for group {group!r}: {e}",
+                exc_info=True,
+            )
+            self.git.reset(files)
+            return False
+
+        if not message:
+            self.logger.error(f"Empty message for {group}")
+            self.git.reset(files)
+            return False
+
+        return self._apply_message(group, message, files)
+
+    def _apply_message(
+        self,
+        group: str,
+        message: str,
+        files: List[str],
+    ) -> bool:
+        if self.dry_run:
+            self.console.print(
+                Panel(
+                    Markdown(message),
+                    title=f"Dry Run: {group}",
+                    border_style="yellow",
+                    expand=False,
+                )
+            )
+            self.cache.append(group, message)
+            self.git.reset(files)
+            return True
+
+        if self.check:
+            message = self._review_with_user(group, message, files)
+            if message is None:
+                return False
+
+        try:
+            self.console.print(
+                Panel(Markdown(message), title="Commit Message", border_style="green")
+            )
+            self.git.commit(message)
+        except Exception as e:
+            self.logger.error(f"Failed to process group {group}: {e}", exc_info=True)
+            self.git.reset(files)
+            return False
+        return True
+
+    def _review_with_user(
+        self,
+        group: str,
+        message: str,
+        files: List[str],
+    ) -> Optional[str]:
+        """Present the message; return the final message, or None to abort."""
+        self.console.print(
+            Panel(
+                Markdown(message),
+                title=f"Proposed Commit Message [group: {group}]",
+                border_style="cyan",
+            )
+        )
+        choice = questionary.select(
+            "How would you like to proceed?",
+            choices=["Confirm", "Edit", "Abort"],
+            default="Confirm",
+        ).ask()
+
+        if not choice or choice == "Abort":
+            self.logger.info(f"Commit aborted by user at group {group}")
+            self.git.reset(files)
+            return None
+        if choice == "Edit":
+            edited = questionary.text(
+                "Edit commit message:",
+                multiline=True,
+                default=message,
+            ).ask()
+            if not edited:
+                self.logger.info(f"Empty edit, commit cancelled for {group}")
+                self.git.reset(files)
+                return None
+            return edited
+        return message
+
+
+def run_commit_engine(**kwargs: Any) -> None:
+    """Entry point used by the CLI."""
     debug = kwargs.get("debug", False)
-    logger = configure_logger("devgen.commit", console=debug)
+    logger = configure_logger("devgen.cli.commit", console=debug)
     try:
-        engine = CommitEngine(**kwargs)
-        engine.execute()
+        CommitEngine(**kwargs).execute()
     except KeyboardInterrupt:
         logger.warning("Interrupted by user. Exiting...")
         sys.exit(0)
@@ -609,4 +389,4 @@ def run_commit_engine(**kwargs):
         logger.error(f"Commit engine failed: {e}", exc_info=True)
 
 
-__all__ = ["run_commit_engine"]
+__all__ = ["CommitEngine", "CommitEngineError", "run_commit_engine"]
