@@ -1,10 +1,15 @@
-import sys
-import questionary
 import subprocess
+import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
+
+import questionary
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.theme import Theme
 
 from devgen.ai import generate_with_ai
 from devgen.utils import (
@@ -13,14 +18,10 @@ from devgen.utils import (
     get_commit_dry_run_path,
     is_file_recent,
     load_template_env,
+    render_custom_template,
     run_git_command,
     sanitize_ai_commit_message,
-    render_custom_template,
 )
-from rich.console import Console
-from rich.panel import Panel
-from rich.markdown import Markdown
-from rich.theme import Theme
 
 
 class CommitEngineError(Exception):
@@ -58,6 +59,8 @@ class CommitEngine:
         provider: str = "gemini",
         model: str = "gemini-2.5-flash",
         logger: Any | None = None,
+        max_groups: int | None = None,
+        max_diff_size: int | None = None,
         **kwargs,
     ):
         self.dry_run = dry_run
@@ -75,6 +78,10 @@ class CommitEngine:
         self.kwargs = kwargs
         self.dry_run_path = get_commit_dry_run_path()
         self.template_env = load_template_env("commit")
+        # CLI flags take precedence over config. Config can still be consulted
+        # in group_files / generate_diff when these are None.
+        self._max_groups_override = max_groups
+        self._max_diff_size_override = max_diff_size
 
         self.console = Console(
             theme=Theme(
@@ -117,7 +124,11 @@ class CommitEngine:
 
     def group_files(self, files: List[str]) -> Dict[str, List[str]]:
         """Groups files by their parent directory with smart merging if limit is exceeded."""
-        max_groups = self.config.get("max_groups", 5)
+        max_groups = (
+            self._max_groups_override
+            if self._max_groups_override is not None
+            else self.config.get("max_groups", 5)
+        )
 
         # 1. Initial grouping by immediate parent
         groups = defaultdict(list)
@@ -176,11 +187,18 @@ class CommitEngine:
             full_content = "\n".join(summary_info + [diff]).strip()
 
             # Truncate if too large
-            if len(full_content) > MAX_DIFF_SIZE:
+            max_size = (
+                self._max_diff_size_override
+                if self._max_diff_size_override is not None
+                else self.config.get("max_diff_size", MAX_DIFF_SIZE)
+            )
+            if len(full_content) > max_size:
                 self.logger.info(
-                    f"Truncating diff from {len(full_content)} to {MAX_DIFF_SIZE} chars"
+                    f"Truncating diff from {len(full_content)} to {max_size} chars "
+                    f"(config: max_diff_size). If you still hit token-limit errors, "
+                    f"lower this further or split the commit into more groups."
                 )
-                half = MAX_DIFF_SIZE // 2
+                half = max_size // 2
                 return (
                     full_content[:half]
                     + "\n\n... [DIFF TRUNCATED FOR TOKEN OPTIMIZATION] ...\n\n"
