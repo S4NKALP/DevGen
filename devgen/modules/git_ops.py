@@ -105,11 +105,16 @@ class GitOperator:
     # ------------------------------------------------------------------ actions
 
     def stage(self, files: list[str]) -> None:
-        """``git add`` the given paths."""
+        """Stage the given paths — ``git add`` for existing files, ``git rm`` for deleted."""
         if not files:
             return
+        existing = [f for f in files if Path(self.cwd or ".").joinpath(f).exists()]
+        deleted = [f for f in files if f not in existing]
         try:
-            self._run(["git", "add", *files])
+            if existing:
+                self._run(["git", "add", *existing])
+            if deleted:
+                self._run(["git", "rm", *deleted])
         except GitError as e:
             raise GitError(f"Could not stage files: {e}") from e
 
