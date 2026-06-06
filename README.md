@@ -21,7 +21,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 
 ## Features
 
-- **AI-Powered Commits**: Generate semantic, context-aware commit messages using AI models from Gemini, OpenAI, Anthropic, HuggingFace, and OpenRouter.
+- **AI-Powered Commits**: Generate semantic, context-aware commit messages using AI models from Gemini, OpenAI, Anthropic, HuggingFace, OpenRouter, and local Ollama.
 - **Battle-Tested**: Produces Conventional Commits and Semantic Versioning compliant changelogs that make sense.
 - **Lightning Fast**: Utilizes smart caching and async operations for speedy performance.
 - **Project Essentials**: Quickly add `.gitignore` and license files to your projects, with access to cached templates even offline.
@@ -34,7 +34,7 @@ DevGen is an innovative CLI tool designed to streamline your development workflo
 - **Typer & Rich**: For building the intuitive and responsive CLI interface.
 - **Questionary**: For interactive prompts and selection menus.
 - **Jinja2**: For the powerful template engine.
-- **AI Models**: From Google Gemini, OpenAI, Anthropic, HuggingFace, and OpenRouter.
+- **AI Models**: From Google Gemini, OpenAI, Anthropic, HuggingFace, OpenRouter, and local Ollama.
 - **Rich**: For text-based user interfaces.
 - **Uv**: For dependency management and installation.
 - **OpenAI**: For AI model integration.
@@ -149,7 +149,7 @@ DevGen wouldn't be possible without these amazing open-source projects and AI pr
 - **Typer** & **Rich** for the CLI interface.
 - **Questionary** for interactive prompts.
 - **Jinja2** for the template engine.
-- **Google Gemini**, **OpenAI**, **Anthropic**, **HuggingFace**, and **OpenRouter** for the AI models.
+- **Google Gemini**, **OpenAI**, **Anthropic**, **HuggingFace**, **OpenRouter**, and local **Ollama** for the AI models.
 
 <div align="center">
 Made with ❤️ by <a href="https://github.com/S4NKALP">Sankalp</a>
