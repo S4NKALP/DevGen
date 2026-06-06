@@ -2,6 +2,8 @@ import time
 from google import genai
 from google.genai import types
 
+from devgen.utils import format_token_limit_error, is_token_limit_error
+
 
 class GeminiProvider:
     """Generates content using Google's Gemini models."""
@@ -40,6 +42,10 @@ class GeminiProvider:
                 return response.text.strip()
             except Exception as e:
                 error_msg = str(e).upper()
+                # Token / context-window overflow is not retryable — no point
+                # backing off, the prompt is just too big.
+                if is_token_limit_error(e):
+                    raise RuntimeError(format_token_limit_error("Gemini", e)) from e
                 # Check for 429 or ResourceExhausted in common error formats
                 if any(
                     x in error_msg

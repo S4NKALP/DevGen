@@ -1,5 +1,7 @@
 from openai import OpenAI
 
+from devgen.utils import format_token_limit_error, is_token_limit_error
+
 
 class OpenrouterProvider:
     """Generates content using OpenRouter (OpenAI-compatible API)."""
@@ -36,6 +38,8 @@ class OpenrouterProvider:
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
+            if is_token_limit_error(e):
+                raise RuntimeError(format_token_limit_error("OpenRouter", e)) from e
             raise RuntimeError(
                 f"OpenRouter request failed: {e}. "
                 "Verify the model id (e.g. `openai/gpt-4o`) and your API key credits."

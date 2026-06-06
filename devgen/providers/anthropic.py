@@ -1,5 +1,7 @@
 import anthropic
 
+from devgen.utils import format_token_limit_error, is_token_limit_error
+
 
 class AnthropicProvider:
     """Generates content using Anthropic's Claude models."""
@@ -23,4 +25,9 @@ class AnthropicProvider:
             )
             return message.content[0].text.strip()
         except Exception as e:
-            raise RuntimeError(f"Anthropic generation failed: {e}")
+            if is_token_limit_error(e):
+                raise RuntimeError(format_token_limit_error("Anthropic", e)) from e
+            raise RuntimeError(
+                f"Anthropic generation failed: {e}. "
+                "Check the model id and your account credits."
+            ) from e

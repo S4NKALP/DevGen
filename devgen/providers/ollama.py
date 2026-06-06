@@ -1,3 +1,4 @@
+from devgen.utils import format_token_limit_error, is_token_limit_error
 
 
 class OllamaProvider:
@@ -37,6 +38,8 @@ class OllamaProvider:
                 **kwargs,
             )
         except Exception as e:
+            if is_token_limit_error(e):
+                raise RuntimeError(format_token_limit_error("Ollama", e)) from e
             raise RuntimeError(
                 f"Ollama request failed (host={host}, model={chosen_model}): {e}. "
                 "Is the Ollama server running? Start it with `ollama serve` and "

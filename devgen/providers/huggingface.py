@@ -1,5 +1,7 @@
 import requests
 
+from devgen.utils import format_token_limit_error, is_token_limit_error
+
 
 class HuggingfaceProvider:
     """Generates content using Hugging Face Inference API."""
@@ -46,6 +48,10 @@ class HuggingfaceProvider:
                         f"Hugging Face model is loading: {err}. "
                         "Wait a minute and retry, or pick a different model."
                     )
+                if is_token_limit_error(err):
+                    raise RuntimeError(
+                        format_token_limit_error("Hugging Face", err)
+                    ) from err
                 raise RuntimeError(f"Hugging Face API error: {err}")
             else:
                 raise RuntimeError(
@@ -55,6 +61,8 @@ class HuggingfaceProvider:
 
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
+            if is_token_limit_error(e):
+                raise RuntimeError(format_token_limit_error("Hugging Face", e)) from e
             raise RuntimeError(
                 f"Hugging Face request failed (HTTP {status}): {e}. "
                 "Check the model id and your token permissions."
@@ -63,5 +71,9 @@ class HuggingfaceProvider:
             raise RuntimeError(
                 f"Hugging Face network error: {e}. Check your connection."
             ) from e
+        except RuntimeError:
+            raise
         except Exception as e:
+            if is_token_limit_error(e):
+                raise RuntimeError(format_token_limit_error("Hugging Face", e)) from e
             raise RuntimeError(f"Hugging Face generation failed: {e}") from e

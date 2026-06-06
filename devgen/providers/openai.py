@@ -1,5 +1,7 @@
 from openai import OpenAI
 
+from devgen.utils import format_token_limit_error, is_token_limit_error
+
 
 class OpenaiProvider:
     """Generates a response string using the OpenAI ChatCompletion API based on the provided prompt and parameters. This method initializes an OpenAI client with the given API key, sends a chat completion request with specified model and additional parameters, and returns the content of the generated message.
@@ -59,6 +61,8 @@ class OpenaiProvider:
                 **kwargs,
             )
         except Exception as e:
+            if is_token_limit_error(e):
+                raise RuntimeError(format_token_limit_error("OpenAI", e)) from e
             raise RuntimeError(
                 f"OpenAI request failed: {e}. "
                 "Check the model name, API key permissions, and your account quota."
