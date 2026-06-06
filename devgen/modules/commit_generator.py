@@ -404,7 +404,7 @@ class CommitEngine:
                 context=manifest_context,
             )
         else:
-            template = self.template_env.get_template("commit_message.j2")
+            template = self.template_env.get_template("commit_message.tpl")
             prompt = template.render(
                 group_name=group,
                 diff_text=diff,
