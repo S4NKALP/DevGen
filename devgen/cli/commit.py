@@ -58,12 +58,28 @@ def run_commit(
             help="Review/edit commit message before committing.",
         ),
     ] = False,
+    max_groups: Annotated[
+        int | None,
+        typer.Option(
+            "--max-groups",
+            help="Maximum number of commit groups. Lower this if you hit token-limit errors.",
+        ),
+    ] = None,
+    max_diff_size: Annotated[
+        int | None,
+        typer.Option(
+            "--max-diff-size",
+            help="Maximum diff size in chars per group (default 8000). "
+            "Lower this if you hit token-limit errors.",
+        ),
+    ] = None,
 ) -> None:
     log_file = get_main_log_path()
     logger = configure_logger("devgen.cli.commit", log_file, console=debug)
     logger.info(f"Log file: {log_file}")
     logger.info(
-        f"Options: dry_run={dry_run}, push={push}, debug={debug}, force={force_rebuild}, check={check}"
+        f"Options: dry_run={dry_run}, push={push}, debug={debug}, force={force_rebuild}, "
+        f"check={check}, max_groups={max_groups}, max_diff_size={max_diff_size}"
     )
 
     run_commit_engine(
@@ -73,6 +89,8 @@ def run_commit(
         force_rebuild=force_rebuild,
         check=check,
         logger=logger,
+        max_groups=max_groups,
+        max_diff_size=max_diff_size,
     )
 
 
