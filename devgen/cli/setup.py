@@ -33,7 +33,14 @@ def setup_config() -> None:
     # Questions
     provider = questionary.select(
         "Select AI Provider:",
-        choices=["gemini", "openai", "huggingface", "openrouter", "anthropic"],
+        choices=[
+            "gemini",
+            "openai",
+            "huggingface",
+            "openrouter",
+            "anthropic",
+            "ollama",
+        ],
         default=current_config.get("provider", "gemini"),
         style=style,
     ).ask()
@@ -67,12 +74,24 @@ def setup_config() -> None:
         raise typer.Exit(code=130)
     emoji = emoji_choice == "Yes"
 
+    ollama_host = current_config.get("ollama_host", "http://localhost:11434")
+    if provider == "ollama":
+        ollama_host_input = questionary.text(
+            "Ollama server URL:",
+            default=ollama_host,
+            style=style,
+        ).ask()
+        if ollama_host_input is None:
+            raise typer.Exit(code=130)
+        ollama_host = ollama_host_input.strip() or ollama_host
+
     # Save Config
     new_config = {
         "provider": provider,
         "model": model,
         "api_key": api_key,
         "emoji": emoji,
+        "ollama_host": ollama_host,
     }
 
     try:
