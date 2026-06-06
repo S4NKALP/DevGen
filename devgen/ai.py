@@ -24,7 +24,8 @@ def generate_with_ai(
     except ModuleNotFoundError as e:
         raise ImportError(
             f"Provider `{provider}` is not a built-in module: {e}. "
-            f"Available providers: gemini, openai, anthropic, huggingface, openrouter."
+            f"Available providers: gemini, openai, anthropic, huggingface, "
+            f"openrouter, ollama."
         ) from e
     except AttributeError as e:
         raise ImportError(

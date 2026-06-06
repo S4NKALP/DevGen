@@ -229,6 +229,7 @@ def load_config() -> Dict[str, Any]:
             "api_key": "",
             "emoji": True,
             "max_groups": 5,
+            "ollama_host": "http://localhost:11434",
         }
         try:
             with config_path.open("w", encoding="utf-8") as f:
