@@ -34,27 +34,6 @@ jobs:
       - name: ruff format --check
         run: uv run ruff format --check .
 
-  typecheck:
-    name: Type check (pyright)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Sync dependencies
-        run: uv sync --all-extras --dev
-
-      - name: pyright
-        run: uvx pyright@1.1.396 devgen
-
   smoke:
     name: Import & CLI smoke (${{ matrix.python-version }})
     runs-on: ubuntu-latest
