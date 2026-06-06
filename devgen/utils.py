@@ -247,6 +247,65 @@ def load_config() -> Dict[str, Any]:
         return {}
 
 
+# Substrings used to identify token / context-length errors from AI providers.
+# Matched case-insensitively against the full stringified exception, so we
+# catch the wide variety of error formats each provider returns.
+_TOKEN_LIMIT_PATTERNS = (
+    "context length",
+    "context_length",
+    "context_length_exceeded",
+    "context window",
+    "context window exceeded",
+    "context_size",
+    "maximum context",
+    "max context",
+    "max_tokens",
+    "max tokens",
+    "prompt is too long",
+    "too many tokens",
+    "token limit",
+    "tokens in the prompt",
+    "input is too long",
+    "request too large",
+    "request was too large",
+    "string too long",
+    "too long for the model",
+    "reduce the length of the messages",
+    "tokens_exceeded",
+)
+
+
+def is_token_limit_error(error: BaseException | str) -> bool:
+    """Return True if the error looks like a model context/token overflow.
+
+    Different SDKs phrase the same condition differently. We look for the
+    common substrings so we can give a single, actionable message instead of
+    the raw provider text.
+    """
+    text = str(error).lower()
+    return any(p in text for p in _TOKEN_LIMIT_PATTERNS)
+
+
+def format_token_limit_error(
+    provider: str,
+    error: BaseException | str,
+    *,
+    group: str | None = None,
+) -> str:
+    """Build a friendly message for a context-window overflow.
+
+    Kept short so it doesn't drown the log line. The original provider
+    error is included so the user can still see the exact cause.
+    """
+    scope = f" ({group})" if group else ""
+    return (
+        f"{provider}: diff exceeds context window{scope}. "
+        f"Cut token usage: --max-groups N, --max-diff-size N, "
+        f"or a larger-context model (gemini-2.5-flash, gpt-4o, claude-3-5-sonnet). "
+        f"Details: {error}"
+    )
+
+
 __all__ = [
     "ensure_log_directory",
     "get_main_log_path",
@@ -262,6 +321,8 @@ __all__ = [
     "load_template_env",
     "load_config",
     "get_questionary_style",
+    "is_token_limit_error",
+    "format_token_limit_error",
 ]
 
 
