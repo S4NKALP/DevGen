@@ -21,8 +21,16 @@ def generate_with_ai(
         provider_module = import_module(f"devgen.providers.{provider}")
         class_name = "".join([x.capitalize() for x in provider.split("_")]) + "Provider"
         provider_class = getattr(provider_module, class_name)
-    except (ModuleNotFoundError, AttributeError) as e:
-        raise ImportError(f"Provider `{provider}` not found or invalid: {e}") from e
+    except ModuleNotFoundError as e:
+        raise ImportError(
+            f"Provider `{provider}` is not a built-in module: {e}. "
+            f"Available providers: gemini, openai, anthropic, huggingface, openrouter."
+        ) from e
+    except AttributeError as e:
+        raise ImportError(
+            f"Provider `{provider}` exists but does not expose a "
+            f"`{class_name}` class. This is a packaging bug."
+        ) from e
 
     provider_instance = provider_class()
     return provider_instance.generate(prompt, api_key=api_key, model=model, **kwargs)
