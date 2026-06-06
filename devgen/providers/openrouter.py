@@ -1,46 +1,25 @@
 from openai import OpenAI
 
-from devgen.utils import format_token_limit_error, is_token_limit_error
+from devgen.providers.base import BaseProvider
 
 
-class OpenrouterProvider:
+class OpenrouterProvider(BaseProvider):
     """Generates content using OpenRouter (OpenAI-compatible API)."""
 
+    DISPLAY_NAME = "OpenRouter"
     BASE_URL = "https://openrouter.ai/api/v1"
+    DEFAULT_MODEL = "openai/gpt-3.5-turbo"
 
-    def generate(
-        self, prompt: str, api_key: str, model: str = "openai/gpt-3.5-turbo", **kwargs
-    ) -> str:
-        """Generates a response using OpenRouter."""
-        if not api_key:
-            raise ValueError(
-                "OpenRouter API key is missing. "
-                "Set it via `devgen setup config` or pass --api-key."
-            )
-
-        try:
-            client = OpenAI(
-                base_url=self.BASE_URL,
-                api_key=api_key,
-            )
-
-            # Remove debug from kwargs if present
-            kwargs.pop("debug", None)
-
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                extra_headers={
-                    "HTTP-Referer": "https://github.com/S4NKALP/devgen",  # Optional
-                    "X-Title": "devgen CLI",  # Optional
-                },
-                **kwargs,
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            if is_token_limit_error(e):
-                raise RuntimeError(format_token_limit_error("OpenRouter", e)) from e
-            raise RuntimeError(
-                f"OpenRouter request failed: {e}. "
-                "Verify the model id (e.g. `openai/gpt-4o`) and your API key credits."
-            ) from e
+    def _generate(self, prompt, api_key, model, **kwargs):
+        kwargs.pop("debug", None)
+        client = OpenAI(base_url=self.BASE_URL, api_key=api_key)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            extra_headers={
+                "HTTP-Referer": "https://github.com/S4NKALP/devgen",
+                "X-Title": "devgen CLI",
+            },
+            **kwargs,
+        )
+        return response.choices[0].message.content
