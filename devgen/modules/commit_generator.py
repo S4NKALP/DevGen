@@ -298,41 +298,81 @@ class CommitEngine:
         self.console.print("[bold green]Push successful.[/bold green]")
 
     def _get_manifest_context(self) -> str:
-        """Finds and reads manifest files to provide context."""
-        manifests = [
-            "pyproject.toml",
-            "package.json",
-            "go.mod",
-            "Cargo.toml",
-            "Gemfile",
-            "requirements.txt",
-            "uv.lock",
-            "package-lock.json",
-            "pnpm-lock.yaml",
-            "yarn.lock",
-            "composer.lock",
-            "Gemfile.lock",
-            "poetry.lock",
-        ]
-        found = []
-        for m in manifests:
-            path = Path(m)
-            if path.exists():
-                try:
-                    content = path.read_text(encoding="utf-8")
-                    # Take only first 100 lines to avoid token bloat
-                    lines = content.splitlines()
-                    summary = "\n".join(lines[:100])
-                    if len(lines) > 100:
-                        summary += "\n... (truncated)"
-                    found.append(f"File: {m}\n---\n{summary}\n---")
-                except Exception:
-                    continue
+        """Return a compact one-line-per-file summary of project manifests.
 
-        if not found:
+        Dumping the first 100 lines of pyproject.toml/requirements.txt is
+        extremely wasteful — most of it is build/tool config the model does
+        not need. We extract just the project identity and the package list
+        so the model can write context-aware commit messages.
+        """
+        import json
+        import re
+
+        import toml
+
+        def _pkg_name(spec: str) -> str:
+            return re.split(r"[><=!~\[]", spec, 1)[0].strip()
+
+        def _pyproject() -> str | None:
+            path = Path("pyproject.toml")
+            if not path.exists():
+                return None
+            try:
+                data = toml.load(path)
+            except Exception:
+                return None
+            proj = data.get("project", {}) if isinstance(data, dict) else {}
+            parts = [
+                f"{k}={proj[k]}"
+                for k in ("name", "version", "description")
+                if proj.get(k)
+            ]
+            deps = proj.get("dependencies") or []
+            if deps:
+                names = [n for n in (_pkg_name(d) for d in deps) if n]
+                if names:
+                    parts.append(f"deps={','.join(names)}")
+            return f"[pyproject.toml] {' '.join(parts)}" if parts else None
+
+        def _package_json() -> str | None:
+            path = Path("package.json")
+            if not path.exists():
+                return None
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                return None
+            parts = [
+                f"{k}={data[k]}"
+                for k in ("name", "version", "description")
+                if data.get(k)
+            ]
+            deps = data.get("dependencies") or {}
+            if isinstance(deps, dict) and deps:
+                parts.append(f"deps={','.join(deps.keys())}")
+            return f"[package.json] {' '.join(parts)}" if parts else None
+
+        def _requirements() -> str | None:
+            path = Path("requirements.txt")
+            if not path.exists():
+                return None
+            try:
+                names = [
+                    n
+                    for n in (
+                        _pkg_name(line)
+                        for line in path.read_text(encoding="utf-8").splitlines()
+                    )
+                    if n and not n.startswith("#")
+                ]
+            except Exception:
+                return None
+            return f"[requirements.txt] deps={','.join(names)}" if names else None
+
+        lines = [s for s in (_pyproject(), _package_json(), _requirements()) if s]
+        if not lines:
             return ""
-
-        return "\n\n### Project Context (Manifests)\n" + "\n".join(found)
+        return "\nProject: " + " | ".join(lines)
 
     def generate_message(self, group: str, diff: str, cache: Dict[str, str]) -> str:
         """Generates a commit message using AI or cache."""
@@ -370,11 +410,7 @@ class CommitEngine:
                 diff_text=diff,
                 use_emoji=use_emoji,
                 context=manifest_context,
-            )
-
-        # Automatically append emoji instruction based on global setting
-        emoji_instr = "Use emojis (🚀, 🐛)." if use_emoji else "No emojis."
-        prompt = f"{prompt.strip()}\n\n- {emoji_instr}"
+            ).strip()
 
         with self.console.status("[bold blue]Generating commit message...[/bold blue]"):
             call_kwargs = dict(self.kwargs)
