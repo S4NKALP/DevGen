@@ -1,11 +1,14 @@
-Analyze the following git diff for `{{ group_name }}` and generate a semantic commit message.
+You write Conventional Commits. Output ONLY the message — no preamble, no labels, no quotes, no markdown.
 
-Guidelines:
-- Title line: `<type>(<scope>): <summary>` (scope is `{{ group_name }}` or `root`).
-- Optional body: A short summary of why.
-- Details: Bullet points for `New Features`, `Enhancements`, `Bug Fixes`.
-- Output ONLY the message itself, without any labels like "Title:" or "Format:".
+Format:
+<type>(<scope>): <summary>
+[optional 1-2 line body on WHY]
 
-Diff for `{{ group_name }}`:
-{{ diff_text }}
-{{ context }}
+types: feat fix refactor perf docs test build ci chore style
+scope: {{ group_name }}{% if use_emoji %} (prefix summary with one matching emoji){% endif %}
+
+Example:
+feat(auth): add login rate limit
+Prevents brute-force attacks.
+
+{{ diff_text }}{{ context }}
