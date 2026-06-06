@@ -48,13 +48,21 @@ def _version_callback(value: bool) -> None:
                 typer.echo(f"devgen version: {version}")
             else:
                 typer.secho(
-                    "Error: Version not found in pyproject.toml",
+                    "Could not determine version: no `project.version` or "
+                    "`tool.poetry.version` found in pyproject.toml.",
                     fg=typer.colors.RED,
                     err=True,
                 )
-        except (FileNotFoundError, KeyError, Exception) as e:
+        except FileNotFoundError:
             typer.secho(
-                f"Error: Could not determine version: {e}",
+                f"pyproject.toml not found at {pyproject_path}. "
+                "The installation may be corrupt.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+        except toml.TomlDecodeError as e:
+            typer.secho(
+                f"pyproject.toml is not valid TOML: {e}",
                 fg=typer.colors.RED,
                 err=True,
             )
