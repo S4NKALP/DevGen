@@ -32,20 +32,35 @@ class OpenaiProvider:
         Returns:
             str: Generated response content.
         """
+        if not api_key:
+            raise ValueError(
+                "OpenAI API key is missing. "
+                "Set it via `devgen setup config` or pass --api-key."
+            )
+
         # 1. Create a client instance with the API key.
         try:
             client = OpenAI(api_key=api_key)
         except Exception as e:
             # Add error handling if the client fails to initialize
-            raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
+            raise RuntimeError(
+                f"Failed to initialize OpenAI client: {e}. "
+                "Verify the key is valid and that the `openai` package is installed."
+            ) from e
 
         # Remove debug from kwargs if present
         kwargs.pop("debug", None)
 
         # 2. Use the modern API syntax: client.chat.completions.create
-        response = client.chat.completions.create(
-            model=model or self.DEFAULT_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs,
-        )
+        try:
+            response = client.chat.completions.create(
+                model=model or self.DEFAULT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"OpenAI request failed: {e}. "
+                "Check the model name, API key permissions, and your account quota."
+            ) from e
         return response.choices[0].message.content.strip()

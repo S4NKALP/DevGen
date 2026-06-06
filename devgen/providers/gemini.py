@@ -15,7 +15,10 @@ class GeminiProvider:
         recommended model.
         """
         if not api_key:
-            raise ValueError("Gemini API key is required.")
+            raise ValueError(
+                "Gemini API key is missing. "
+                "Set it via `devgen setup config` or pass --api-key."
+            )
 
         client = genai.Client(api_key=api_key)
 

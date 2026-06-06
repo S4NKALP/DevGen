@@ -11,7 +11,10 @@ class OpenrouterProvider:
     ) -> str:
         """Generates a response using OpenRouter."""
         if not api_key:
-            raise ValueError("OpenRouter API key is required.")
+            raise ValueError(
+                "OpenRouter API key is missing. "
+                "Set it via `devgen setup config` or pass --api-key."
+            )
 
         try:
             client = OpenAI(
@@ -33,4 +36,7 @@ class OpenrouterProvider:
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            raise RuntimeError(f"OpenRouter generation failed: {e}")
+            raise RuntimeError(
+                f"OpenRouter request failed: {e}. "
+                "Verify the model id (e.g. `openai/gpt-4o`) and your API key credits."
+            ) from e

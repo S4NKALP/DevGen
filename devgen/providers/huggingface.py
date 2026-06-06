@@ -15,7 +15,10 @@ class HuggingfaceProvider:
     ) -> str:
         """Generates a response using Hugging Face API."""
         if not api_key:
-            raise ValueError("Hugging Face API token is required.")
+            raise ValueError(
+                "Hugging Face API token is missing. "
+                "Set it via `devgen setup config` or pass --api-key."
+            )
 
         api_url = self.API_URL_TEMPLATE.format(model=model)
         headers = {"Authorization": f"Bearer {api_key}"}
@@ -34,12 +37,31 @@ class HuggingfaceProvider:
             response.raise_for_status()
             result = response.json()
 
-            if isinstance(result, list) and "generated_text" in result[0]:
+            if isinstance(result, list) and result and "generated_text" in result[0]:
                 return result[0]["generated_text"].strip()
             elif isinstance(result, dict) and "error" in result:
-                raise RuntimeError(f"Hugging Face API error: {result['error']}")
+                err = result["error"]
+                if "is currently loading" in str(err).lower():
+                    raise RuntimeError(
+                        f"Hugging Face model is loading: {err}. "
+                        "Wait a minute and retry, or pick a different model."
+                    )
+                raise RuntimeError(f"Hugging Face API error: {err}")
             else:
-                return str(result)
+                raise RuntimeError(
+                    "Hugging Face returned an unexpected response shape. "
+                    "The model may not support text-generation."
+                )
 
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            raise RuntimeError(
+                f"Hugging Face request failed (HTTP {status}): {e}. "
+                "Check the model id and your token permissions."
+            ) from e
+        except requests.RequestException as e:
+            raise RuntimeError(
+                f"Hugging Face network error: {e}. Check your connection."
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Hugging Face generation failed: {e}")
+            raise RuntimeError(f"Hugging Face generation failed: {e}") from e

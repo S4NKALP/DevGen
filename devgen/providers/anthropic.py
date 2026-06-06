@@ -9,7 +9,10 @@ class AnthropicProvider:
     ) -> str:
         """Generates a response using the Anthropic API."""
         if not api_key:
-            raise ValueError("Anthropic API key is required.")
+            raise ValueError(
+                "Anthropic API key is missing. "
+                "Set it via `devgen setup config` or pass --api-key."
+            )
 
         try:
             client = anthropic.Anthropic(api_key=api_key)
