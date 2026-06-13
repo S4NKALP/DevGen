@@ -7,6 +7,6 @@ pyyaml==6.0.3
 questionary==2.1.1
 requests==2.34.2
 rich==15.0.0
-ruff==0.15.16
+ruff==0.15.17
 toml==0.10.2
 typer==0.26.7
