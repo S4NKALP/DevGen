@@ -221,8 +221,7 @@ def load_template(sub_dir: str, name: str) -> str:
     template_path = template_dir / name
     if not template_path.is_file():
         raise RuntimeError(
-            f"Template not found: {template_path}. "
-            "The installation may be corrupted."
+            f"Template not found: {template_path}. The installation may be corrupted."
         )
     return template_path.read_text(encoding="utf-8")
 
