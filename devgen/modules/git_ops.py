@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from devgen.utils import configure_logger, run_git_command
+from devgen.utils import configure_logger, get_git_root, run_git_command
 
 
 class GitError(RuntimeError):
@@ -26,7 +26,7 @@ class GitOperator:
         logger=None,
         quiet_commands: bool = True,
     ) -> None:
-        self.cwd = cwd
+        self.cwd = cwd or get_git_root()
         self.logger = logger or configure_logger("devgen.git")
         self.quiet_commands = quiet_commands
 

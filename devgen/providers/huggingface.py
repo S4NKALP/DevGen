@@ -20,7 +20,9 @@ class HuggingfaceProvider(BaseProvider):
         }
 
         try:
-            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            response = requests.post(
+                api_url, headers=headers, json=payload, timeout=120
+            )
             response.raise_for_status()
             result = response.json()
         except requests.HTTPError as e:

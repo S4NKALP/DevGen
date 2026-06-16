@@ -14,7 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from devgen.utils import run_git_command
+from devgen.utils import get_git_root, run_git_command
 
 
 # Lock files and other metadata blobs whose full diff would just bloat the
@@ -54,7 +54,7 @@ class DiffBuilder:
         logger=None,
     ) -> None:
         self.max_size = max_size
-        self.cwd = cwd
+        self.cwd = cwd or get_git_root()
         self.logger = logger
 
     def build(self, files: List[str]) -> str:

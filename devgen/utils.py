@@ -142,6 +142,15 @@ def configure_logger(
     return logger
 
 
+def get_git_root(cwd: Optional[Path] = None) -> Optional[Path]:
+    """Return the root directory of the current git repository, or None."""
+    try:
+        output = run_git_command(["git", "rev-parse", "--show-toplevel"], cwd=cwd)
+        return Path(output) if output else None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
 def run_git_command(
     args: list[str],
     check: bool = True,
