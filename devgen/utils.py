@@ -24,10 +24,10 @@ def get_commit_dry_run_path() -> Path:
 
 
 def is_file_recent(file_path: Path | str, max_age_minutes: int = 120) -> bool:
-    path = Path(file_path)
-    if not path.exists():
+    try:
+        return (time.time() - Path(file_path).stat().st_mtime) <= max_age_minutes * 60
+    except FileNotFoundError:
         return False
-    return (time.time() - path.stat().st_mtime) <= max_age_minutes * 60
 
 
 def sanitize_ai_commit_message(raw_text: str) -> str:
@@ -193,18 +193,18 @@ def get_git_staged_files() -> list[str]:
 
 
 def read_file_content(filepath: Path | str) -> Optional[str]:
-    path = Path(filepath)
-    if path.exists():
-        return path.read_text(encoding="utf-8")
-    return None
+    try:
+        return Path(filepath).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
 
 
 def delete_file(filepath: Path | str) -> bool:
-    path = Path(filepath)
-    if path.exists():
-        path.unlink()
+    try:
+        Path(filepath).unlink()
         return True
-    return False
+    except FileNotFoundError:
+        return False
 
 
 def load_template_env(sub_dir: str) -> Environment:

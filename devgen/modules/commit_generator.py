@@ -388,6 +388,7 @@ def run_commit_engine(**kwargs: Any) -> None:
         sys.exit(0)
     except Exception as e:
         logger.error(f"Commit engine failed: {e}", exc_info=True)
+        sys.exit(1)
 
 
 __all__ = ["CommitEngine", "CommitEngineError", "run_commit_engine"]

@@ -1,9 +1,13 @@
+import re
 from pathlib import Path
 from typing import List
 
 import requests
 
 from devgen.utils import configure_logger
+
+# Only allow safe characters in template names to prevent path traversal
+_TEMPLATE_NAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 
 class GitignoreGenerator:
@@ -41,6 +45,11 @@ class GitignoreGenerator:
         self, name: str, use_cache: bool = True, offline: bool = False
     ) -> str:
         """Fetches template content from cache or GitHub."""
+        if not _TEMPLATE_NAME_RE.match(name):
+            raise ValueError(
+                f"Invalid template name '{name}'. "
+                "Names must contain only alphanumeric characters, hyphens, dots, or underscores."
+            )
         cache_file = self.cache_dir / f"{name}.gitignore"
 
         if offline:

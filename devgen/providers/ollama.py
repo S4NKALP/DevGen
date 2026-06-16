@@ -18,18 +18,22 @@ class OllamaProvider(BaseProvider):
     DEFAULT_HOST = "http://localhost:11434"
     DEFAULT_MODEL = "llama3.2"
 
+    # Keys consumed by devgen itself — never forwarded to the SDK.
+    _DEVGEN_KEYS = frozenset({"debug", "ollama_host", "max_retries", "retry_delay"})
+
     def _generate(self, prompt, api_key, model, **kwargs):
         host = kwargs.get("ollama_host") or self.DEFAULT_HOST
         base_url = f"{host.rstrip('/')}/v1"
-        kwargs.pop("debug", None)
-        kwargs.pop("ollama_host", None)
 
-        client = OpenAI(base_url=base_url, api_key=api_key or "ollama")
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            **kwargs,
-        )
+        # Only forward known OpenAI-compatible parameters
+        safe_kwargs = {k: v for k, v in kwargs.items() if k not in self._DEVGEN_KEYS}
+
+        with OpenAI(base_url=base_url, api_key=api_key or "ollama") as client:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                **safe_kwargs,
+            )
 
         if not response.choices:
             raise RuntimeError(

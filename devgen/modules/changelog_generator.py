@@ -58,7 +58,7 @@ class ChangelogGenerator:
             return self._log_cmd(f"{last_tag}..HEAD")
         except (RuntimeError, subprocess.CalledProcessError):
             self.logger.info("No tags found, generating for all commits.")
-            return ["git", "log", "--format=%H|%an|%ad|%s|%b", "--date=short"]
+            return ["git", "log", "--format=%H|%an|%ad|%s|%b%x00", "--date=short"]
 
     # ----------------------------------------------------------------- parsing
 
