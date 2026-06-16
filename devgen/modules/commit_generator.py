@@ -33,8 +33,8 @@ from devgen.utils import (
     extract_commit_messages,
     get_commit_dry_run_path,
     is_file_recent,
-    load_template_env,
-    render_custom_template,
+    load_template,
+    render_template,
     sanitize_ai_commit_message,
 )
 
@@ -74,13 +74,13 @@ class CommitMessageBuilder:
 
     def __init__(
         self,
-        template_env,
+        template_str: str,
         config: Dict[str, Any],
         provider: str,
         model: str,
         debug: bool = False,
     ) -> None:
-        self.template_env = template_env
+        self.template_str = template_str
         self.config = config
         self.provider = provider
         self.model = model
@@ -97,25 +97,14 @@ class CommitMessageBuilder:
         use_emoji = self.config.get("emoji", True)
         ollama_host = self.config.get("ollama_host")
 
-        if custom_template:
-            prompt = render_custom_template(
-                custom_template,
-                group_name=group,
-                diff_text=diff,
-                use_emoji=use_emoji,
-                context=manifest_context,
-            )
-        else:
-            prompt = (
-                self.template_env.get_template("commit_message.tpl")
-                .render(
-                    group_name=group,
-                    diff_text=diff,
-                    use_emoji=use_emoji,
-                    context=manifest_context,
-                )
-                .strip()
-            )
+        template = custom_template or self.template_str
+        prompt = render_template(
+            template,
+            group_name=group,
+            diff_text=diff,
+            use_emoji=use_emoji,
+            context=manifest_context,
+        ).strip()
 
         provider = (
             extra_kwargs.get("provider") or self.config.get("provider") or self.provider
@@ -198,10 +187,10 @@ class CommitEngine:
             ),
             logger=self.logger,
         )
-        self.template_env = load_template_env("commit")
+        self.template_str = load_template("commit", "commit_message.tpl")
         self.cache = CacheManager(get_commit_dry_run_path())
         self.message_builder = CommitMessageBuilder(
-            self.template_env,
+            self.template_str,
             self.config,
             provider=self.provider,
             model=self.model,

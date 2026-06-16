@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from jinja2 import Environment, FileSystemLoader
 
 
 def ensure_log_directory() -> Path:
@@ -216,21 +215,61 @@ def delete_file(filepath: Path | str) -> bool:
         return False
 
 
-def load_template_env(sub_dir: str) -> Environment:
+def load_template(sub_dir: str, name: str) -> str:
+    """Load a template file from the templates directory."""
     template_dir = Path(__file__).parent / "templates" / sub_dir
-    if not template_dir.is_dir():
+    template_path = template_dir / name
+    if not template_path.is_file():
         raise RuntimeError(
-            f"Template directory not found: {template_dir}. "
+            f"Template not found: {template_path}. "
             "The installation may be corrupted."
         )
-    return Environment(loader=FileSystemLoader(template_dir))
+    return template_path.read_text(encoding="utf-8")
 
 
-def render_custom_template(template_str: str, **context) -> str:
-    """Renders a Jinja2 template from a string."""
-    env = Environment()
-    template = env.from_string(template_str)
-    return template.render(**context)
+def render_template(template_str: str, **context) -> str:
+    """Render a simple template with variable substitution and conditionals.
+
+    Supports:
+    - {{ variable }} - variable substitution
+    - {% if condition %}...{% endif %} - conditional blocks
+    - {% if condition %}...{% else %}...{% endif %} - conditional with else
+    """
+    result = template_str
+
+    # Process conditional blocks: {% if var %}...{% endif %}
+    # and {% if var %}...{% else %}...{% endif %}
+    if_pattern = re.compile(
+        r"\{%\s*if\s+(\w+)\s*%\}(.*?)\{%\s*endif\s*%\}",
+        re.DOTALL,
+    )
+
+    def replace_if(match):
+        var_name = match.group(1)
+        content = match.group(2)
+        value = context.get(var_name)
+        if value:
+            # Check for else block
+            else_pattern = re.compile(r"\{%\s*else\s*%\}", re.DOTALL)
+            parts = else_pattern.split(content, 1)
+            return parts[0]
+        else:
+            else_pattern = re.compile(r"\{%\s*else\s*%\}", re.DOTALL)
+            parts = else_pattern.split(content, 1)
+            return parts[1] if len(parts) > 1 else ""
+
+    result = if_pattern.sub(replace_if, result)
+
+    # Process variable substitutions: {{ variable }}
+    var_pattern = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+
+    def replace_var(match):
+        var_name = match.group(1)
+        return str(context.get(var_name, ""))
+
+    result = var_pattern.sub(replace_var, result)
+
+    return result
 
 
 def load_config() -> Dict[str, Any]:
@@ -338,7 +377,8 @@ __all__ = [
     "get_git_staged_files",
     "read_file_content",
     "delete_file",
-    "load_template_env",
+    "load_template",
+    "render_template",
     "load_config",
     "get_questionary_style",
     "is_token_limit_error",
