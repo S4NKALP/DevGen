@@ -129,10 +129,7 @@ class FileGrouper:
             parent_path = str(Path(deepest).parent)
             new_key = "root" if parent_path == "." else parent_path
             files = groups.pop(deepest)
-            if new_key in groups:
-                groups[new_key].extend(files)
-            else:
-                groups["root"].extend(files)
+            groups.setdefault(new_key, []).extend(files)
         return groups
 
 

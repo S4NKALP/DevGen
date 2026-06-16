@@ -16,4 +16,6 @@ class AnthropicProvider(BaseProvider):
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
+        if not message.content:
+            raise RuntimeError(f"Anthropic returned no content for model {model!r}.")
         return message.content[0].text or ""

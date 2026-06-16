@@ -246,7 +246,13 @@ def load_config() -> Dict[str, Any]:
 
     try:
         with config_path.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            data = yaml.safe_load(f)
+            if not isinstance(data, dict):
+                print(
+                    f"Warning: Config at {config_path} is not a dict, using defaults."
+                )
+                return {}
+            return data
     except Exception as e:
         print(f"Warning: Failed to load config from {config_path}: {e}")
         return {}

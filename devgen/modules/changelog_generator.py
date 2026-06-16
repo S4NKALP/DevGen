@@ -32,17 +32,21 @@ class ChangelogGenerator:
         else:
             cmd = self._resolve_range(to_ref)
         try:
-            return run_git_command(cmd).split("\n")
+            output = run_git_command(cmd)
+            # Use %x00 as separator to avoid splitting on newlines in commit bodies
+            # Then filter out empty strings
+            return [c for c in output.split("\0") if c.strip()]
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Git command failed: {e}")
             raise RuntimeError(f"Git command failed: {e}") from e
 
     def _log_cmd(self, range_spec: str) -> List[str]:
-        # Format: hash|author|date|subject|body
+        # Format: hash|author|date|subject|body (separated by %x00 to avoid
+        # splitting on newlines within commit bodies)
         return [
             "git",
             "log",
-            "--format=%H|%an|%ad|%s|%b",
+            "--format=%H|%an|%ad|%s|%b%x00",
             "--date=short",
             range_spec,
         ]

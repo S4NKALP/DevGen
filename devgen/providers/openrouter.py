@@ -22,4 +22,6 @@ class OpenrouterProvider(BaseProvider):
             },
             **kwargs,
         )
-        return response.choices[0].message.content
+        if not response.choices:
+            raise RuntimeError(f"OpenRouter returned no choices for model {model!r}.")
+        return response.choices[0].message.content or ""

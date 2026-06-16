@@ -48,6 +48,12 @@ def edit_config(
 
     if not key:
         choices = list(config.keys())
+        if not choices:
+            typer.secho(
+                "No configuration keys found. Run `devgen setup config` first.",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit()
         key = questionary.select(
             "Select key to update:", choices=choices, style=style
         ).ask()

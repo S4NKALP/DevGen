@@ -120,7 +120,7 @@ def validate() -> None:
         for f in staged:
             typer.echo(f"- {f}")
     else:
-        typer.secho("[i] No staged files.", fg=typer.colors.RED)
+        typer.secho("[i] No staged files.", fg=typer.colors.YELLOW)
 
 
 @app.command("undo")

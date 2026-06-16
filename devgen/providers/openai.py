@@ -17,4 +17,6 @@ class OpenaiProvider(BaseProvider):
             messages=[{"role": "user", "content": prompt}],
             **kwargs,
         )
+        if not response.choices:
+            raise RuntimeError(f"OpenAI returned no choices for model {model!r}.")
         return response.choices[0].message.content or ""
