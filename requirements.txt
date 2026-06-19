@@ -4,7 +4,7 @@ openai==2.15.0
 pre-commit==4.5.1
 pyyaml==6.0.3
 questionary==2.1.1
-requests==2.32.5
+requests==2.34.2
 rich==14.2.0
 ruff==0.14.13
 toml==0.10.2
