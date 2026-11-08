@@ -1,3 +1,4 @@
+import subprocess
 from typing import Annotated
 
 import questionary
@@ -11,6 +12,7 @@ from devgen.utils import (
     get_git_staged_files,
     get_main_log_path,
     read_file_content,
+    run_git_command,
 )
 
 app = typer.Typer(
@@ -78,8 +80,9 @@ def run_commit(
     logger = configure_logger("devgen.cli.commit", log_file, console=debug)
     logger.info(f"Log file: {log_file}")
     logger.info(
-        f"Options: dry_run={dry_run}, push={push}, debug={debug}, force={force_rebuild}, "
-        f"check={check}, max_groups={max_groups}, max_diff_size={max_diff_size}"
+        f"Options: dry_run={dry_run}, push={push}, debug={debug}, "
+        f"force={force_rebuild}, check={check}, max_groups={max_groups}, "
+        f"max_diff_size={max_diff_size}"
     )
 
     run_commit_engine(
@@ -117,32 +120,34 @@ def validate() -> None:
     staged = get_git_staged_files()
     if staged:
         typer.secho(f"{len(staged)} staged file(s):", fg=typer.colors.GREEN)
-        for f in staged:
-            typer.echo(f"- {f}")
+        for file in staged:
+            typer.echo(f"- {file}")
     else:
         typer.secho("[i] No staged files.", fg=typer.colors.YELLOW)
 
 
 @app.command("undo")
 def undo_commit() -> None:
-    """Undoes the last commit but keeps changes staged."""
-    from devgen.utils import run_git_command
-
+    """Undo the last commit but keep the changes staged."""
     try:
-        # Check if there's at least one commit
         run_git_command(["git", "rev-parse", "HEAD"])
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         typer.secho("No commits found to undo.", fg=typer.colors.RED)
         return
 
-    if questionary.confirm(
+    if not questionary.confirm(
         "Are you sure you want to undo the last commit? (Changes will remain staged)",
         default=False,
     ).ask():
-        try:
-            run_git_command(["git", "reset", "--soft", "HEAD~1"])
-            typer.secho(
-                "Last commit undone. Changes are still staged.", fg=typer.colors.GREEN
-            )
-        except Exception as e:
-            typer.secho(f"Failed to undo commit: {e}", fg=typer.colors.RED)
+        return
+
+    try:
+        run_git_command(["git", "reset", "--soft", "HEAD~1"])
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        typer.secho(f"Failed to undo commit: {error}", fg=typer.colors.RED)
+        return
+
+    typer.secho(
+        "Last commit undone. Changes are still staged.",
+        fg=typer.colors.GREEN,
+    )

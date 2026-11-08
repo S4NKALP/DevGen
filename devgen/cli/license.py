@@ -1,11 +1,13 @@
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 
 import questionary
 import typer
-from typing_extensions import Annotated
 
+from devgen.cli.wizard import ask
 from devgen.modules.license_generator import LicenseGenerator
+from devgen.utils import get_questionary_style
 
 app = typer.Typer(
     name="license",
@@ -34,68 +36,57 @@ def generate_license(
         typer.secho(" No license templates found.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    from devgen.utils import get_questionary_style
-
     style = get_questionary_style()
-
-    # 1. Select License
     choices = [
         questionary.Choice(
-            title=f"{lic['name']} ({lic['key']})",
-            value=lic["key"],
-            description=lic["description"],
+            title=f"{license_info['name']} ({license_info['key']})",
+            value=license_info["key"],
+            description=license_info["description"],
         )
-        for lic in licenses
+        for license_info in licenses
     ]
 
-    license_key = questionary.select(
-        "Select a License:",
-        choices=choices,
-        use_indicator=True,
-        use_shortcuts=True,
-        style=style,
-    ).ask()
+    license_key = ask(
+        questionary.select(
+            "Select a License:",
+            choices=choices,
+            use_indicator=True,
+            use_shortcuts=True,
+            style=style,
+        )
+    )
 
-    if license_key is None:
-        raise typer.Exit(code=130)
-
-    if not license_key:
-        raise typer.Exit()
-
-    # 2. Enter Author Name
-    # Try to guess from git config if possible, but for now just empty default
-    author = questionary.text("Enter Author Name:", style=style).ask()
-    if author is None:
-        raise typer.Exit(code=130)
-
+    author = ask(questionary.text("Enter Author Name:", style=style)).strip()
     if not author:
         typer.secho(" Author name is required.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    # 3. Enter Year
-    current_year = str(datetime.now().year)
-    year = questionary.text("Enter Year:", default=current_year, style=style).ask()
-    if year is None:
-        raise typer.Exit(code=130)
+    year = ask(
+        questionary.text(
+            "Enter Year:",
+            default=str(datetime.now().year),
+            style=style,
+        )
+    ).strip()
 
-    # Generate
+    output_path = Path(output)
+    if output_path.exists():
+        overwrite = ask(
+            questionary.confirm(
+                f"File {output} already exists. Overwrite?",
+                default=False,
+                style=style,
+            )
+        )
+        if not overwrite:
+            typer.secho("Operation cancelled.", fg=typer.colors.YELLOW)
+            return
+
     try:
         content = generator.render_license(license_key, author, year)
-
-        output_path = Path(output)
-        if output_path.exists():
-            overwrite = questionary.confirm(
-                f"File {output} already exists. Overwrite?", default=False, style=style
-            ).ask()
-            if overwrite is None:
-                raise typer.Exit(code=130)
-            if not overwrite:
-                typer.secho("Operation cancelled.", fg=typer.colors.YELLOW)
-                raise typer.Exit()
-
         output_path.write_text(content, encoding="utf-8")
-        typer.secho(f"\n License generated at {output_path}", fg=typer.colors.GREEN)
-
-    except Exception as e:
-        typer.secho(f"\n Failed to generate license: {e}", fg=typer.colors.RED)
+    except (OSError, ValueError) as error:
+        typer.secho(f"\n Failed to generate license: {error}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
+
+    typer.secho(f"\n License generated at {output_path}", fg=typer.colors.GREEN)

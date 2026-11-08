@@ -1,78 +1,65 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 class LicenseGenerator:
-    """Generates license files from templates."""
+    """Generates license files from packaged JSON templates."""
+
+    _YEAR_PLACEHOLDERS = ("[year]", "[yyyy]", "{{year}}", "<year>")
+    _AUTHOR_PLACEHOLDERS = (
+        "[fullname]",
+        "[name of copyright owner]",
+        "{{author}}",
+        "<name of author>",
+        "[author]",
+    )
 
     def __init__(self):
-        self.templates_dir = Path(__file__).parent.parent / "templates" / "licenses"
+        self.templates_dir = (
+            Path(__file__).resolve().parent.parent / "templates" / "licenses"
+        )
 
-    def list_licenses(self) -> List[Dict[str, str]]:
-        """Lists available license templates."""
-        licenses = []
+    def _load_templates(self) -> dict[str, dict]:
         if not self.templates_dir.exists():
-            return []
+            return {}
 
-        for file_path in self.templates_dir.glob("*.json"):
+        templates = {}
+        for file_path in sorted(self.templates_dir.glob("*.json")):
             try:
-                with file_path.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    licenses.append(
-                        {
-                            "key": data.get("key", file_path.stem),
-                            "name": data.get("name", "Unknown License"),
-                            "description": data.get("description", ""),
-                        }
-                    )
-            except Exception:
+                data = json.loads(file_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
                 continue
+            templates[data.get("key", file_path.stem)] = data
+        return templates
 
-        # Sort by name
-        return sorted(licenses, key=lambda x: x["name"])
+    def list_licenses(self) -> list[dict[str, str]]:
+        """List available license templates, sorted by display name."""
+        licenses = [
+            {
+                "key": key,
+                "name": data.get("name", "Unknown License"),
+                "description": data.get("description", ""),
+            }
+            for key, data in self._load_templates().items()
+        ]
+        return sorted(licenses, key=lambda item: item["name"])
 
-    def get_license_template(self, key: str) -> Optional[Dict]:
-        """Loads a specific license template by key."""
-        # We assume key matches filename for simplicity, or we search.
-        # Based on file listing, filenames match keys (e.g. mit.json -> mit)
-        file_path = self.templates_dir / f"{key}.json"
-        if not file_path.exists():
-            return None
-
-        try:
-            with file_path.open("r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
+    def get_license_template(self, key: str) -> dict | None:
+        """Load a license template by key."""
+        return self._load_templates().get(key)
 
     def render_license(self, key: str, author: str, year: str = "") -> str:
-        """Renders the license content with placeholders replaced."""
-        template_data = self.get_license_template(key)
-        if not template_data:
+        """Render the license content with placeholders replaced."""
+        template = self.get_license_template(key)
+        if not template:
             raise ValueError(f"License template '{key}' not found.")
 
-        content = template_data.get("template", "")
+        content = template.get("template", "")
+        year = year or str(datetime.now().year)
 
-        if not year:
-            year = str(datetime.now().year)
-
-        # Replace placeholders
-        # Support various formats found in templates
-        year_placeholders = ["[year]", "[yyyy]", "{{year}}", "<year>"]
-        author_placeholders = [
-            "[fullname]",
-            "[name of copyright owner]",
-            "{{author}}",
-            "<name of author>",
-            "[author]",
-        ]
-
-        for p in year_placeholders:
-            content = content.replace(p, year)
-
-        for p in author_placeholders:
-            content = content.replace(p, author)
-
+        for placeholder in self._YEAR_PLACEHOLDERS:
+            content = content.replace(placeholder, year)
+        for placeholder in self._AUTHOR_PLACEHOLDERS:
+            content = content.replace(placeholder, author)
         return content

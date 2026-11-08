@@ -1,28 +1,27 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "devgen-cli"
-version = "0.3.0"
+version = "0.3.1"
 description = "A collection of developer tools"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
 { name = "Sankalp Tharu", email = "sankalptharu50028@gmail.com" },
 ]
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
 keywords = ["devgen", "cli", "git", "changelog", "gitignore", "license", "commit-generator", "commit"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.7",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "anthropic>=0.116.0",

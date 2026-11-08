@@ -1,13 +1,14 @@
 import re
 import subprocess
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from devgen.modules.changelog_sections import (
     DEFAULT_STYLES,
     Section,
+    SectionStyle,
     section_for_type,
 )
 from devgen.utils import configure_logger, run_git_command
@@ -24,124 +25,137 @@ class ChangelogGenerator:
 
     # ------------------------------------------------------------------ commits
 
-    def get_commits(self, from_ref: str = "", to_ref: str = "HEAD") -> List[str]:
+    def get_commits(self, from_ref: str = "", to_ref: str = "HEAD") -> list[str]:
         """Fetch commit lines in the requested range."""
-        if from_ref:
-            range_spec = f"{from_ref}..{to_ref}"
-            cmd = self._log_cmd(range_spec)
-        else:
-            cmd = self._resolve_range(to_ref)
-        try:
-            output = run_git_command(cmd)
-            # Use %x00 as separator to avoid splitting on newlines in commit bodies
-            # Then filter out empty strings
-            return [c for c in output.split("\0") if c.strip()]
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Git command failed: {e}")
-            raise RuntimeError(f"Git command failed: {e}") from e
-
-    def _log_cmd(self, range_spec: str) -> List[str]:
-        # Format: hash|author|date|subject|body (separated by %x00 to avoid
-        # splitting on newlines within commit bodies)
-        return [
+        range_spec = self._resolve_range(from_ref, to_ref)
+        command = [
             "git",
             "log",
             "--format=%H|%an|%ad|%s|%b%x00",
             "--date=short",
-            range_spec,
         ]
+        if range_spec:
+            command.append(range_spec)
 
-    def _resolve_range(self, to_ref: str) -> List[str]:
+        output = run_git_command(command)
+        return [commit for commit in output.split("\0") if commit.strip()]
+
+    def _resolve_range(self, from_ref: str, to_ref: str) -> str:
+        if from_ref:
+            return f"{from_ref}..{to_ref}"
+
         try:
             last_tag = run_git_command(["git", "describe", "--tags", "--abbrev=0"])
-            self.logger.info(f"Generating changelog from last tag: {last_tag}")
-            return self._log_cmd(f"{last_tag}..HEAD")
-        except (RuntimeError, subprocess.CalledProcessError):
-            self.logger.info("No tags found, generating for all commits.")
-            return ["git", "log", "--format=%H|%an|%ad|%s|%b%x00", "--date=short"]
+        except subprocess.CalledProcessError:
+            self.logger.info("No tags found; using full history.")
+            return ""
+
+        self.logger.info(f"Generating changelog from last tag: {last_tag}")
+        return f"{last_tag}..{to_ref}"
 
     # ----------------------------------------------------------------- parsing
 
-    def parse_commits(self, raw_commits: List[str]) -> Dict[Section, List[Dict]]:
+    def parse_commits(self, raw_commits: list[str]) -> dict[Section, list[dict]]:
         """Group raw commit lines into :class:`Section` buckets."""
-        groups: Dict[Section, List[Dict]] = defaultdict(list)
+        groups: dict[Section, list[dict]] = defaultdict(list)
         for line in raw_commits:
             entry = self._parse_line(line)
             if entry is None:
                 continue
-            section = section_for_type(entry["type"])
-            entry["section"] = section
+
+            groups[section_for_type(entry["type"])].append(entry)
             if entry["breaking"]:
                 groups[Section.BREAKING].append(entry)
-            groups[section].append(entry)
+
         return dict(groups)
 
-    def _parse_line(self, line: str) -> Dict | None:
-        if not line.strip():
+    def _parse_line(self, line: str) -> dict | None:
+        line = line.strip()
+        if not line:
             return None
+
         parts = line.split("|", 4)
         if len(parts) < 4:
             return None
+
         commit_hash, author, date, subject = parts[:4]
         body = parts[4] if len(parts) > 4 else ""
 
         match = self._CC_PATTERN.match(subject)
-        if match:
-            c_type, c_scope, breaking, c_subject = match.groups()
+        if not match:
             return {
-                "type": c_type,
+                "type": "",
                 "hash": commit_hash,
                 "author": author,
                 "date": date,
-                "scope": c_scope,
-                "subject": c_subject,
+                "scope": None,
+                "subject": subject,
                 "body": body,
-                "breaking": bool(breaking),
+                "breaking": False,
             }
+
+        commit_type, scope, breaking, parsed_subject = match.groups()
         return {
-            "type": "",
+            "type": commit_type,
             "hash": commit_hash,
             "author": author,
             "date": date,
-            "scope": None,
-            "subject": subject,
+            "scope": scope,
+            "subject": parsed_subject,
             "body": body,
-            "breaking": False,
+            "breaking": bool(breaking),
         }
 
     # ------------------------------------------------------------------ output
 
     def generate_markdown(
         self,
-        groups: Dict[Section, List[Dict]],
+        groups: dict[Section, list[dict]],
         version: str = "Unreleased",
     ) -> str:
         """Render groups as a markdown changelog block."""
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        out = [f"## {version} ({date_str})\n"]
+        return self._render(
+            groups,
+            title=f"## {version} ({datetime.now():%Y-%m-%d})",
+            styles=DEFAULT_STYLES,
+            heading_level="##",
+        )
+
+    def _render(
+        self,
+        groups: dict[Section, list[dict]],
+        *,
+        title: str,
+        styles: Mapping[Section, SectionStyle],
+        heading_level: str,
+        include_hash: bool = True,
+    ) -> str:
+        lines = [title]
         for section in Section.ordered():
             commits = groups.get(section)
             if not commits:
                 continue
-            style = DEFAULT_STYLES[section]
-            out.append(f"## {style.emoji} {style.heading}\n")
-            for c in commits:
-                scope = f"**{c['scope']}**: " if c.get("scope") else ""
-                out.append(f"- {scope}{c['subject']} ({c['hash'][:7]})")
-            out.append("")
-        return "\n".join(out)
 
-    def run(self, output_file: Optional[str] = "CHANGELOG.md", from_ref: str = ""):
+            style = styles[section]
+            lines.extend(["", f"{heading_level} {style.emoji} {style.heading}"])
+            for commit in commits:
+                scope = f"**{commit['scope']}**: " if commit.get("scope") else ""
+                suffix = f" ({commit['hash'][:7]})" if include_hash else ""
+                lines.append(f"- {scope}{commit['subject']}{suffix}")
+
+        return "\n".join(lines) + "\n"
+
+    def run(self, output_file: str | None = "CHANGELOG.md", from_ref: str = ""):
         """Fetch → parse → write (or print) the changelog."""
         raw_commits = self.get_commits(from_ref)
-        if not raw_commits or not raw_commits[0]:
+        if not raw_commits:
             self.logger.warning("No commits found.")
             return
-        groups = self.parse_commits(raw_commits)
-        md_content = self.generate_markdown(groups)
+
+        markdown = self.generate_markdown(self.parse_commits(raw_commits))
 
         if not output_file:
-            print(md_content)
+            print(markdown)
             return
 
         path = Path(output_file)
@@ -149,11 +163,12 @@ class ChangelogGenerator:
             old = path.read_text(encoding="utf-8")
             if old.strip().startswith("# CHANGELOG"):
                 header, _, rest = old.partition("\n")
-                new_content = f"{header}\n\n{md_content}\n{rest}"
+                new_content = f"{header}\n\n{markdown}\n{rest}"
             else:
-                new_content = f"# CHANGELOG\n\n{md_content}\n\n{old}"
+                new_content = f"# CHANGELOG\n\n{markdown}\n\n{old}"
         else:
-            new_content = f"# CHANGELOG\n\n{md_content}"
+            new_content = f"# CHANGELOG\n\n{markdown}"
+
         path.write_text(new_content, encoding="utf-8")
         self.logger.info(f"Changelog written to {output_file}")
         print(f" Changelog updated: {output_file}")

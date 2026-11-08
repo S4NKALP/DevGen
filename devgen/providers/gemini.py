@@ -1,3 +1,5 @@
+from typing import Any
+
 from google import genai
 from google.genai import types
 
@@ -10,7 +12,13 @@ class GeminiProvider(BaseProvider):
     DISPLAY_NAME = "Gemini"
     DEFAULT_MODEL = "gemini-2.5-flash"
 
-    def _generate(self, prompt, api_key, model, **kwargs):
+    def _generate(
+        self,
+        prompt: str,
+        api_key: str | None,
+        model: str,
+        **kwargs: Any,
+    ) -> str:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
             model=model,

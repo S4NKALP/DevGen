@@ -1,11 +1,27 @@
+"""Small, dependency-light helpers shared across the package."""
+
 import logging
 import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
+
+CONFIG_PATH = Path.home() / ".devgen.yaml"
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash",
+    "api_key": "",
+    "emoji": True,
+    "max_groups": 5,
+    "ollama_host": "http://localhost:11434",
+}
+
+
+# --------------------------------------------------------------------------- paths
 
 
 def ensure_log_directory() -> Path:
@@ -24,72 +40,49 @@ def get_commit_dry_run_path() -> Path:
 
 def is_file_recent(file_path: Path | str, max_age_minutes: int = 120) -> bool:
     try:
-        return (time.time() - Path(file_path).stat().st_mtime) <= max_age_minutes * 60
-    except FileNotFoundError:
+        age_seconds = time.time() - Path(file_path).stat().st_mtime
+    except OSError:
         return False
+    return age_seconds <= max_age_minutes * 60
+
+
+# ------------------------------------------------------------------- commit text
+
+_HEADER_RE = re.compile(
+    r"^(feat|fix|chore|refactor|docs|style|test|build|ci|perf|revert|deps|wip)"
+    r"(?:\([^)]*\))?!?: .+",
+    re.IGNORECASE,
+)
+
+_LABEL_RE = re.compile(
+    r"^(?:#+\s*)?(?:\d+\.?|\*|-)?\s*(?:Title|Commit Message|Message):\s*",
+    re.IGNORECASE,
+)
 
 
 def sanitize_ai_commit_message(raw_text: str) -> str:
-    """
-    Cleans up the AI-generated commit message.
-    It looks for a conventional commit header and extracts everything from there.
-    It handles bolded headers and common AI prefixes.
-    """
+    """Return the first Conventional Commit block found in an AI response."""
     if not raw_text:
         return ""
 
-    lines = raw_text.strip().split("\n")
+    lines = raw_text.strip().splitlines()
 
-    # Regex for conventional commit header (including optional bolding)
-    # Examples:
-    # - feat(root): summary
-    # - **fix: bug fix**
-    # - chore(deps)!: breaking change
-    header_pattern = re.compile(
-        r"^(\*\*)?(feat|fix|chore|refactor|docs|style|test|build|ci|perf|revert|deps|wip)(\(.*\))?!?: .*",
-        re.IGNORECASE,
-    )
+    for index, line in enumerate(lines):
+        candidate = _LABEL_RE.sub("", line.replace("**", "").strip()).strip()
+        if not _HEADER_RE.match(candidate):
+            continue
 
-    cleaned_lines = []
-    found_header = False
-
-    for line in lines:
-        stripped = line.strip()
-        if not found_header:
-            # First, strip bolding if it wraps the whole line or parts of it
-            # This is simpler than handling it in the regex
-            candidate = stripped.replace("**", "").strip()
-
-            # Clean the line by removing labels like "1. Title:", "### Message:", etc.
-            clean_line = re.sub(
-                r"^(#+\s+)?(\d+\.?|\*|-)?\s*(Title|Commit Message|Message):\s*",
-                "",
-                candidate,
-                flags=re.IGNORECASE,
-            ).strip()
-
-            if header_pattern.match(clean_line):
-                found_header = True
-                cleaned_lines.append(clean_line)
-        else:
-            # If we hit another header or a known separator, we stop
-            if "**Sponsor**" in line:
+        message = [candidate]
+        for following in lines[index + 1 :]:
+            if "**Sponsor**" in following:
                 break
-            # Ignore trailing markdown code block markers
-            if line.strip() in ("```", "```md", "```markdown"):
+            if following.strip().startswith("```"):
                 continue
-            cleaned_lines.append(line)
+            message.append(following)
+        return "\n".join(message).strip()
 
-    if cleaned_lines:
-        return "\n".join(cleaned_lines).strip()
-
-    # Fallback: if no conventional commit header found, just take the first non-empty line
-    # to avoid failing completely, but log a warning if possible.
-    for line in lines:
-        if line.strip():
-            return line.strip()
-
-    return ""
+    # No Conventional Commit header: fall back to the first non-empty line.
+    return next((line.strip() for line in lines if line.strip()), "")
 
 
 def parse_markdown_sections(
@@ -99,14 +92,11 @@ def parse_markdown_sections(
     if not path.exists():
         return {}
 
-    with path.open(encoding="utf-8") as f:
-        content = f.read()
-
-    results = {}
-    matches = re.findall(marker_pattern, content, re.DOTALL)
-    for key, value in matches:
-        results[key] = value.strip()
-    return results
+    content = path.read_text(encoding="utf-8")
+    return {
+        key: value.strip()
+        for key, value in re.findall(marker_pattern, content, re.DOTALL)
+    }
 
 
 def extract_commit_messages(filepath: Path | str) -> dict[str, str]:
@@ -114,114 +104,99 @@ def extract_commit_messages(filepath: Path | str) -> dict[str, str]:
     return parse_markdown_sections(filepath, pattern)
 
 
+# ------------------------------------------------------------------------ logging
+
+
 def configure_logger(
-    name: str = "devgen", log_file: Optional[Path | str] = None, console: bool = True
+    name: str = "devgen",
+    log_file: Path | str | None = None,
+    console: bool = True,
 ) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-
-    if logger.hasHandlers():
-        logger.handlers.clear()
+    logger.handlers.clear()
+    logger.propagate = False
 
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    # Console handler
     if console:
-        ch = logging.StreamHandler()
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
 
-    # File handler
     if log_file:
         path = Path(log_file)
         path.parent.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(path, mode="w", encoding="utf-8")
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
+        file_handler = logging.FileHandler(path, mode="w", encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
     return logger
 
 
-def get_git_root(cwd: Optional[Path] = None) -> Optional[Path]:
-    """Return the root directory of the current git repository, or None."""
-    try:
-        output = run_git_command(["git", "rev-parse", "--show-toplevel"], cwd=cwd)
-        return Path(output) if output else None
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return None
+# ---------------------------------------------------------------------------- git
 
 
 def run_git_command(
     args: list[str],
     check: bool = True,
-    cwd: Optional[Path] = None,
+    cwd: Path | None = None,
     encoding: str = "utf-8",
     errors: str = "replace",
 ) -> str:
-    """
-    Executes a git command and returns the output.
+    """Run a git command and return its stripped stdout."""
+    result = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        encoding=encoding,
+        errors=errors,
+        check=check,
+        cwd=cwd,
+    )
+    return result.stdout.strip()
 
-    Args:
-        args: List of command arguments (e.g., ["git", "status"]).
-        check: Whether to raise an exception on non-zero exit code.
-        cwd: Current working directory for the command.
-        encoding: Output encoding.
-        errors: Error handling strategy for encoding.
 
-    Returns:
-        The standard output of the command, stripped of leading/trailing whitespace.
-
-    Raises:
-        subprocess.CalledProcessError: If the command fails and check is True.
-    """
+def get_git_root(cwd: Path | None = None) -> Path | None:
+    """Return the repository root, or ``None`` outside a git repository."""
     try:
-        res = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            encoding=encoding,
-            errors=errors,
-            check=check,
-            cwd=cwd,
-        )
-        return res.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        # Log the error if a logger is configured, but re-raise
-        # We don't have access to a specific logger here easily without passing it in,
-        # so we rely on the caller to handle logging if needed, or we could log to a default one.
-        # For now, just re-raise as the caller expects.
-        raise e
+        output = run_git_command(["git", "rev-parse", "--show-toplevel"], cwd=cwd)
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    return Path(output) if output else None
 
 
 def get_git_staged_files() -> list[str]:
     try:
         output = run_git_command(["git", "diff", "--name-only", "--cached"])
-        return [f for f in output.splitlines() if f.strip()]
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, OSError):
         return []
+    return [line for line in output.splitlines() if line.strip()]
 
 
-def read_file_content(filepath: Path | str) -> Optional[str]:
+# ------------------------------------------------------------------------ files
+
+
+def read_file_content(filepath: Path | str) -> str | None:
     try:
         return Path(filepath).read_text(encoding="utf-8")
-    except FileNotFoundError:
+    except (OSError, UnicodeDecodeError):
         return None
 
 
 def delete_file(filepath: Path | str) -> bool:
     try:
         Path(filepath).unlink()
-        return True
-    except FileNotFoundError:
+    except OSError:
         return False
+    return True
 
 
 def load_template(sub_dir: str, name: str) -> str:
-    """Load a template file from the templates directory."""
-    template_dir = Path(__file__).parent / "templates" / sub_dir
-    template_path = template_dir / name
+    """Load a packaged template file."""
+    template_path = Path(__file__).resolve().parent / "templates" / sub_dir / name
     if not template_path.is_file():
         raise RuntimeError(
             f"Template not found: {template_path}. The installation may be corrupted."
@@ -229,88 +204,64 @@ def load_template(sub_dir: str, name: str) -> str:
     return template_path.read_text(encoding="utf-8")
 
 
-def render_template(template_str: str, **context) -> str:
-    """Render a simple template with variable substitution and conditionals.
+# -------------------------------------------------------------------- templating
 
-    Supports:
-    - {{ variable }} - variable substitution
-    - {% if condition %}...{% endif %} - conditional blocks
-    - {% if condition %}...{% else %}...{% endif %} - conditional with else
-    """
-    result = template_str
+_IF_BLOCK_RE = re.compile(
+    r"\{%\s*if\s+(\w+)\s*%\}(.*?)(?:\{%\s*else\s*%\}(.*?))?\{%\s*endif\s*%\}",
+    re.DOTALL,
+)
+_VARIABLE_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 
-    # Process conditional blocks: {% if var %}...{% endif %}
-    # and {% if var %}...{% else %}...{% endif %}
-    if_pattern = re.compile(
-        r"\{%\s*if\s+(\w+)\s*%\}(.*?)\{%\s*endif\s*%\}",
-        re.DOTALL,
+
+def render_template(template_str: str, **context: Any) -> str:
+    """Render ``{{ variable }}`` substitutions and ``{% if %}`` blocks."""
+
+    def render_if(match: re.Match[str]) -> str:
+        variable, truthy_block, falsy_block = match.groups()
+        return truthy_block if context.get(variable) else (falsy_block or "")
+
+    result = _IF_BLOCK_RE.sub(render_if, template_str)
+    return _VARIABLE_RE.sub(
+        lambda match: str(context.get(match.group(1), "")),
+        result,
     )
 
-    def replace_if(match):
-        var_name = match.group(1)
-        content = match.group(2)
-        value = context.get(var_name)
-        if value:
-            # Check for else block
-            else_pattern = re.compile(r"\{%\s*else\s*%\}", re.DOTALL)
-            parts = else_pattern.split(content, 1)
-            return parts[0]
-        else:
-            else_pattern = re.compile(r"\{%\s*else\s*%\}", re.DOTALL)
-            parts = else_pattern.split(content, 1)
-            return parts[1] if len(parts) > 1 else ""
 
-    result = if_pattern.sub(replace_if, result)
-
-    # Process variable substitutions: {{ variable }}
-    var_pattern = re.compile(r"\{\{\s*(\w+)\s*\}\}")
-
-    def replace_var(match):
-        var_name = match.group(1)
-        return str(context.get(var_name, ""))
-
-    result = var_pattern.sub(replace_var, result)
-
-    return result
+# ------------------------------------------------------------------------- config
 
 
-def load_config() -> Dict[str, Any]:
-    config_path = Path.home() / ".devgen.yaml"
+def save_config(config: dict[str, Any]) -> None:
+    CONFIG_PATH.write_text(
+        yaml.safe_dump(config, sort_keys=False),
+        encoding="utf-8",
+    )
 
-    if not config_path.exists():
-        default_config = {
-            "provider": "gemini",
-            "model": "gemini-2.5-flash",
-            "api_key": "",
-            "emoji": True,
-            "max_groups": 5,
-            "ollama_host": "http://localhost:11434",
-        }
+
+def load_config() -> dict[str, Any]:
+    """Load the user config, creating it with defaults on first run."""
+    if not CONFIG_PATH.exists():
         try:
-            with config_path.open("w", encoding="utf-8") as f:
-                yaml.dump(default_config, f, default_flow_style=False)
-            # We don't print here to avoid noise during normal execution
-        except Exception as e:
-            print(f"Warning: Failed to create default config at {config_path}: {e}")
-            return {}
+            save_config(DEFAULT_CONFIG)
+        except OSError as error:
+            print(f"Warning: could not create {CONFIG_PATH}: {error}")
+        return dict(DEFAULT_CONFIG)
 
     try:
-        with config_path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-            if not isinstance(data, dict):
-                print(
-                    f"Warning: Config at {config_path} is not a dict, using defaults."
-                )
-                return {}
-            return data
-    except Exception as e:
-        print(f"Warning: Failed to load config from {config_path}: {e}")
-        return {}
+        data = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        print(f"Warning: could not read {CONFIG_PATH}: {error}")
+        return dict(DEFAULT_CONFIG)
 
+    if not isinstance(data, dict):
+        print(f"Warning: {CONFIG_PATH} is not a mapping; using defaults.")
+        return dict(DEFAULT_CONFIG)
+
+    return {**DEFAULT_CONFIG, **data}
+
+
+# ---------------------------------------------------------------------- AI errors
 
 # Substrings used to identify token / context-length errors from AI providers.
-# Matched case-insensitively against the full stringified exception, so we
-# catch the wide variety of error formats each provider returns.
 _TOKEN_LIMIT_PATTERNS = (
     "context length",
     "context_length",
@@ -337,14 +288,9 @@ _TOKEN_LIMIT_PATTERNS = (
 
 
 def is_token_limit_error(error: BaseException | str) -> bool:
-    """Return True if the error looks like a model context/token overflow.
-
-    Different SDKs phrase the same condition differently. We look for the
-    common substrings so we can give a single, actionable message instead of
-    the raw provider text.
-    """
+    """Return True if the error looks like a model context/token overflow."""
     text = str(error).lower()
-    return any(p in text for p in _TOKEN_LIMIT_PATTERNS)
+    return any(pattern in text for pattern in _TOKEN_LIMIT_PATTERNS)
 
 
 def format_token_limit_error(
@@ -353,11 +299,7 @@ def format_token_limit_error(
     *,
     group: str | None = None,
 ) -> str:
-    """Build a friendly message for a context-window overflow.
-
-    Kept short so it doesn't drown the log line. The original provider
-    error is included so the user can still see the exact cause.
-    """
+    """Build a short, actionable message for a context-window overflow."""
     scope = f" ({group})" if group else ""
     return (
         f"{provider}: diff exceeds context window{scope}. "
@@ -367,25 +309,7 @@ def format_token_limit_error(
     )
 
 
-__all__ = [
-    "ensure_log_directory",
-    "get_main_log_path",
-    "get_commit_dry_run_path",
-    "is_file_recent",
-    "sanitize_ai_commit_message",
-    "extract_commit_messages",
-    "configure_logger",
-    "run_git_command",
-    "get_git_staged_files",
-    "read_file_content",
-    "delete_file",
-    "load_template",
-    "render_template",
-    "load_config",
-    "get_questionary_style",
-    "is_token_limit_error",
-    "format_token_limit_error",
-]
+# ----------------------------------------------------------------------- UI style
 
 
 def get_questionary_style():
@@ -393,15 +317,41 @@ def get_questionary_style():
 
     return Style(
         [
-            ("qmark", "fg:#673ab7 bold"),  # Token.QuestionMark
-            ("question", "bold"),  # Token.Question
-            ("answer", "fg:#f44336 bold"),  # Token.Answer
-            ("pointer", "fg:#673ab7 bold"),  # Token.Pointer
-            ("highlighted", "fg:#673ab7 bold"),  # Token.Selected
-            ("selected", "fg:#cc5454"),  # Token.SelectedItem
-            ("separator", "fg:#cc5454"),  # Token.Separator
-            ("instruction", ""),  # Token.Instruction
-            ("text", ""),  # Token.Text
-            ("disabled", "fg:#858585 italic"),  # Token.Disabled
+            ("qmark", "fg:#673ab7 bold"),
+            ("question", "bold"),
+            ("answer", "fg:#f44336 bold"),
+            ("pointer", "fg:#673ab7 bold"),
+            ("highlighted", "fg:#673ab7 bold"),
+            ("selected", "fg:#cc5454"),
+            ("separator", "fg:#cc5454"),
+            ("instruction", ""),
+            ("text", ""),
+            ("disabled", "fg:#858585 italic"),
         ]
     )
+
+
+__all__ = [
+    "CONFIG_PATH",
+    "DEFAULT_CONFIG",
+    "configure_logger",
+    "delete_file",
+    "ensure_log_directory",
+    "extract_commit_messages",
+    "format_token_limit_error",
+    "get_commit_dry_run_path",
+    "get_git_root",
+    "get_git_staged_files",
+    "get_main_log_path",
+    "get_questionary_style",
+    "is_file_recent",
+    "is_token_limit_error",
+    "load_config",
+    "load_template",
+    "parse_markdown_sections",
+    "read_file_content",
+    "render_template",
+    "run_git_command",
+    "sanitize_ai_commit_message",
+    "save_config",
+]

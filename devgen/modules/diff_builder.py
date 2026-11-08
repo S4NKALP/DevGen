@@ -9,13 +9,12 @@ Three small composable classes:
 
 import json
 import re
-import subprocess
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional
+
+import toml
 
 from devgen.utils import get_git_root, run_git_command
-
 
 # Lock files and other metadata blobs whose full diff would just bloat the
 # prompt. We mark them as updated and skip the actual diff.
@@ -34,15 +33,6 @@ IGNORED_DIFF_PATTERNS = (
 # via ``max_diff_size`` in the config.
 DEFAULT_MAX_DIFF_SIZE = 8000
 
-# Manifests we read for project context, in priority order. Lock files
-# are excluded — they're noisy and rarely change in a way that informs
-# a commit message.
-_MANIFEST_FILES = (
-    "pyproject.toml",
-    "package.json",
-    "requirements.txt",
-)
-
 
 class DiffBuilder:
     """Produces a staged diff for a list of paths with truncation."""
@@ -50,44 +40,35 @@ class DiffBuilder:
     def __init__(
         self,
         max_size: int = DEFAULT_MAX_DIFF_SIZE,
-        cwd: Optional[Path] = None,
+        cwd: Path | None = None,
         logger=None,
     ) -> None:
         self.max_size = max_size
         self.cwd = cwd or get_git_root()
         self.logger = logger
 
-    def build(self, files: List[str]) -> str:
+    def build(self, files: list[str]) -> str:
         summary, to_diff = self._partition(files)
-        diff = self._run_staged_diff(to_diff)
-        full = "\n".join(summary + [diff]).strip()
-        if len(full) > self.max_size:
-            return self._truncate(full)
-        return full
 
-    # --- internals --------------------------------------------------------
-
-    def _partition(self, files: List[str]) -> tuple[list[str], list[str]]:
-        summary, to_diff = [], []
-        for f in files:
-            if Path(f).name in IGNORED_DIFF_PATTERNS:
-                summary.append(f"[METADATA UPDATED] {f}")
-            else:
-                to_diff.append(f)
-        return summary, to_diff
-
-    def _run_staged_diff(self, files: List[str]) -> str:
-        if not files:
-            return ""
-        try:
-            return run_git_command(
-                ["git", "--no-pager", "diff", "--staged", "--", *files],
+        diff = ""
+        if to_diff:
+            diff = run_git_command(
+                ["git", "--no-pager", "diff", "--staged", "--", *to_diff],
                 cwd=self.cwd,
             )
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Git command failed: {' '.join(e.cmd)}\nError: {e.stderr.strip()}"
-            ) from e
+
+        full = "\n".join(summary + [diff]).strip()
+        return self._truncate(full) if len(full) > self.max_size else full
+
+    @staticmethod
+    def _partition(files: list[str]) -> tuple[list[str], list[str]]:
+        summary, to_diff = [], []
+        for file in files:
+            if Path(file).name in IGNORED_DIFF_PATTERNS:
+                summary.append(f"[METADATA UPDATED] {file}")
+            else:
+                to_diff.append(file)
+        return summary, to_diff
 
     def _truncate(self, full: str) -> str:
         if self.logger is not None:
@@ -110,113 +91,142 @@ class FileGrouper:
     def __init__(self, max_groups: int = 5) -> None:
         self.max_groups = max(1, max_groups)
 
-    def group(self, files: List[str]) -> Dict[str, List[str]]:
-        groups: Dict[str, List[str]] = defaultdict(list)
-        for f in files:
-            parent = str(Path(f).parent)
-            key = "root" if parent == "." else parent
-            groups[key].append(f)
-        if len(groups) <= self.max_groups:
-            return dict(groups)
-        return self._merge_deepest(dict(groups))
+    def group(self, files: list[str]) -> dict[str, list[str]]:
+        groups: dict[str, list[str]] = defaultdict(list)
+        for file in files:
+            parent = str(Path(file).parent)
+            groups["root" if parent == "." else parent].append(file)
 
-    def _merge_deepest(self, groups: Dict[str, List[str]]) -> Dict[str, List[str]]:
         while len(groups) > self.max_groups:
-            candidates = [k for k in groups if k != "root"]
-            if not candidates:
+            deepest = max(
+                (key for key in groups if key != "root"),
+                key=lambda key: len(Path(key).parts),
+                default=None,
+            )
+            if deepest is None:
                 break
-            deepest = max(candidates, key=lambda p: len(Path(p).parts))
-            parent_path = str(Path(deepest).parent)
-            new_key = "root" if parent_path == "." else parent_path
-            files = groups.pop(deepest)
-            groups.setdefault(new_key, []).extend(files)
-        return groups
+
+            parent = str(Path(deepest).parent)
+            groups["root" if parent == "." else parent].extend(groups.pop(deepest))
+
+        return dict(groups)
 
 
 class ManifestInspector:
     """Extracts a compact one-line-per-file project summary.
 
     Dumping the first 100 lines of ``pyproject.toml``/``requirements.txt``
-    is extremely wasteful — most of it is build/tool config the model does
-    not need. We extract just the project identity and the package list
-    so the model can write context-aware commit messages.
+    is wasteful — most of it is build/tool config the model does not need.
+    We extract just the project identity and the package list.
     """
 
     @staticmethod
-    def summary(cwd: Optional[Path] = None) -> str:
+    def summary(cwd: Path | None = None) -> str:
         cwd = cwd or get_git_root() or Path(".")
-        lines = [
-            s
-            for s in (
+        parts = [
+            part
+            for part in (
                 ManifestInspector._pyproject(cwd),
                 ManifestInspector._package_json(cwd),
                 ManifestInspector._requirements(cwd),
             )
-            if s
+            if part
         ]
-        if not lines:
-            return ""
-        return "\nProject: " + " | ".join(lines)
+        return "\nProject: " + " | ".join(parts) if parts else ""
 
-    # --- extractors -------------------------------------------------------
+    @staticmethod
+    def _format(
+        source: str,
+        *,
+        name: str | None = None,
+        version: str | None = None,
+        description: str | None = None,
+        deps: list[str] | None = None,
+    ) -> str | None:
+        fields = [
+            f"{key}={value}"
+            for key, value in (
+                ("name", name),
+                ("version", version),
+                ("description", description),
+            )
+            if value
+        ]
+        if deps:
+            fields.append(f"deps={','.join(deps)}")
+        return f"[{source}] {' '.join(fields)}" if fields else None
 
     @staticmethod
     def _pkg_name(spec: str) -> str:
         return re.split(r"[><=!~\[]", spec, 1)[0].strip()
 
     @staticmethod
-    def _pyproject(cwd: Path) -> Optional[str]:
+    def _pyproject(cwd: Path) -> str | None:
         path = cwd / "pyproject.toml"
         if not path.exists():
             return None
-        try:
-            import toml
 
+        try:
             data = toml.load(path)
-        except Exception:
+        except (OSError, ValueError):
             return None
-        proj = data.get("project", {}) if isinstance(data, dict) else {}
-        parts = [
-            f"{k}={proj[k]}" for k in ("name", "version", "description") if proj.get(k)
+
+        project = data.get("project", {}) if isinstance(data, dict) else {}
+        deps = [
+            name
+            for name in (
+                ManifestInspector._pkg_name(dep)
+                for dep in project.get("dependencies") or []
+            )
+            if name
         ]
-        deps = proj.get("dependencies") or []
-        if deps:
-            names = [n for n in (ManifestInspector._pkg_name(d) for d in deps) if n]
-            if names:
-                parts.append(f"deps={','.join(names)}")
-        return f"[pyproject.toml] {' '.join(parts)}" if parts else None
+        return ManifestInspector._format(
+            "pyproject.toml",
+            name=project.get("name"),
+            version=project.get("version"),
+            description=project.get("description"),
+            deps=deps,
+        )
 
     @staticmethod
-    def _package_json(cwd: Path) -> Optional[str]:
+    def _package_json(cwd: Path) -> str | None:
         path = cwd / "package.json"
         if not path.exists():
             return None
+
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, ValueError):
             return None
-        parts = [
-            f"{k}={data[k]}" for k in ("name", "version", "description") if data.get(k)
-        ]
-        deps = data.get("dependencies") or {}
-        if isinstance(deps, dict) and deps:
-            parts.append(f"deps={','.join(deps.keys())}")
-        return f"[package.json] {' '.join(parts)}" if parts else None
+
+        dependencies = data.get("dependencies") or {}
+        deps = list(dependencies) if isinstance(dependencies, dict) else []
+        return ManifestInspector._format(
+            "package.json",
+            name=data.get("name"),
+            version=data.get("version"),
+            description=data.get("description"),
+            deps=deps,
+        )
 
     @staticmethod
-    def _requirements(cwd: Path) -> Optional[str]:
+    def _requirements(cwd: Path) -> str | None:
         path = cwd / "requirements.txt"
         if not path.exists():
             return None
+
         try:
-            names = [
-                n
-                for n in (
-                    ManifestInspector._pkg_name(line)
-                    for line in path.read_text(encoding="utf-8").splitlines()
-                )
-                if n and not n.startswith("#")
-            ]
-        except Exception:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, ValueError):
             return None
-        return f"[requirements.txt] deps={','.join(names)}" if names else None
+
+        deps = [
+            name
+            for name in (
+                ManifestInspector._pkg_name(line)
+                for line in lines
+                if line.strip() and not line.strip().startswith("#")
+            )
+            if name
+        ]
+        return ManifestInspector._format("requirements.txt", deps=deps)

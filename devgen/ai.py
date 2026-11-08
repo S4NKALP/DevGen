@@ -1,37 +1,51 @@
+"""Provider registry and dispatch for AI generation."""
+
 from importlib import import_module
+from typing import Any
+
+from devgen.providers.base import BaseProvider
+
+# Provider name -> (module, class). Keeping the registry explicit makes
+# adding a provider a one-line change and avoids guessing class names.
+PROVIDERS: dict[str, tuple[str, str]] = {
+    "gemini": ("devgen.providers.gemini", "GeminiProvider"),
+    "openai": ("devgen.providers.openai", "OpenaiProvider"),
+    "anthropic": ("devgen.providers.anthropic", "AnthropicProvider"),
+    "openrouter": ("devgen.providers.openrouter", "OpenrouterProvider"),
+    "huggingface": ("devgen.providers.huggingface", "HuggingfaceProvider"),
+    "ollama": ("devgen.providers.ollama", "OllamaProvider"),
+}
+
+
+def _provider_class(name: str) -> type[BaseProvider]:
+    try:
+        module_name, class_name = PROVIDERS[name.lower()]
+    except KeyError as error:
+        available = ", ".join(sorted(PROVIDERS))
+        raise ValueError(
+            f"Unknown provider `{name}`. Available providers: {available}."
+        ) from error
+
+    return getattr(import_module(module_name), class_name)
 
 
 def generate_with_ai(
-    prompt, provider="gemini", api_key=None, model="gemini-2.5-flash", **kwargs
-):
-    """Generates AI-based content such as commit messages using the specified provider and model.
-    This function dynamically loads and initializes the provider class, sets the API key, and invokes the provider's generate method with the provided prompt and additional parameters.
+    prompt: str,
+    provider: str = "gemini",
+    api_key: str | None = None,
+    model: str | None = None,
+    **kwargs: Any,
+) -> str:
+    """Generate text with the requested provider.
 
-    Args:
-        prompt (str): The input prompt used to generate content.
-        provider (str): The name of the provider module and class to use; defaults to "gemini".
-        api_key (str, optional): The API key for authenticating with the provider. Should be provided via config file or kwargs.
-        model (str): The name of the model to use with the provider; defaults to "gemini".
-        **kwargs: Additional keyword arguments to pass to the provider's generate method.
-
-    Returns:
-        str: The generated content produced by the AI provider.
+    ``model=None`` lets the provider pick its own default model.
     """
-    try:
-        provider_module = import_module(f"devgen.providers.{provider}")
-        class_name = "".join([x.capitalize() for x in provider.split("_")]) + "Provider"
-        provider_class = getattr(provider_module, class_name)
-    except ModuleNotFoundError as e:
-        raise ImportError(
-            f"Provider `{provider}` is not a built-in module: {e}. "
-            f"Available providers: gemini, openai, anthropic, huggingface, "
-            f"openrouter, ollama."
-        ) from e
-    except AttributeError as e:
-        raise ImportError(
-            f"Provider `{provider}` exists but does not expose a "
-            f"`{class_name}` class. This is a packaging bug."
-        ) from e
+    return _provider_class(provider)().generate(
+        prompt,
+        api_key=api_key,
+        model=model,
+        **kwargs,
+    )
 
-    provider_instance = provider_class()
-    return provider_instance.generate(prompt, api_key=api_key, model=model, **kwargs)
+
+__all__ = ["PROVIDERS", "generate_with_ai"]

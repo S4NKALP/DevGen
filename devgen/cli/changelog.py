@@ -1,5 +1,7 @@
+import subprocess
+from typing import Annotated
+
 import typer
-from typing_extensions import Annotated
 
 from devgen.modules.changelog_generator import ChangelogGenerator
 
@@ -30,9 +32,8 @@ def generate_changelog(
         ),
     ] = "",
 ) -> None:
-    generator = ChangelogGenerator()
     try:
-        generator.run(output_file=output, from_ref=from_ref)
-    except Exception as e:
-        typer.secho(f"Error generating changelog: {e}", fg=typer.colors.RED)
+        ChangelogGenerator().run(output_file=output, from_ref=from_ref)
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        typer.secho(f"Error generating changelog: {error}", fg=typer.colors.RED)
         raise typer.Exit(code=1)

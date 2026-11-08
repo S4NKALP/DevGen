@@ -1,14 +1,11 @@
 """Encapsulates every ``git`` invocation the commit engine makes.
 
-Wraps :func:`devgen.utils.run_git_command` with the project's preferred
-error handling and turns raw CLI output into typed results. Higher-level
-classes (:class:`CommitEngine`) depend on this instead of calling git
-themselves, so the engine code stays focused on orchestration.
+Higher-level code depends on this class instead of calling git directly,
+so git error handling lives in one place.
 """
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from devgen.utils import configure_logger, get_git_root, run_git_command
 
@@ -22,7 +19,7 @@ class GitOperator:
 
     def __init__(
         self,
-        cwd: Optional[Path] = None,
+        cwd: Path | None = None,
         logger=None,
         quiet_commands: bool = True,
     ) -> None:
@@ -30,28 +27,18 @@ class GitOperator:
         self.logger = logger or configure_logger("devgen.git")
         self.quiet_commands = quiet_commands
 
-    # ------------------------------------------------------------------ helpers
-
-    def _run(self, args, *, check: bool = True) -> str:
+    def _run(self, args: list[str], *, check: bool = True) -> str:
         try:
             return run_git_command(args, check=check, cwd=self.cwd)
-        except subprocess.CalledProcessError as e:
-            cmd_str = " ".join(e.cmd) if e.cmd else "git"
-            stderr = (e.stderr or "").strip()
-            raise GitError(f"Git command failed: {cmd_str}\nError: {stderr}") from e
-
-    def _format_error(self, e: subprocess.CalledProcessError) -> str:
-        cmd_str = " ".join(e.cmd) if e.cmd else "git"
-        return f"Git command failed: {cmd_str}\nError: {(e.stderr or '').strip()}"
+        except subprocess.CalledProcessError as error:
+            command = " ".join(error.cmd) if error.cmd else "git"
+            stderr = (error.stderr or "").strip()
+            raise GitError(f"Git command failed: {command}\nError: {stderr}") from error
 
     # ------------------------------------------------------------------ queries
 
-    def has_upstream(self) -> bool:
-        """Return True if the current branch tracks an upstream."""
-        return bool(self.upstream())
-
     def upstream(self) -> str:
-        """Return the upstream branch name, or empty string if none."""
+        """Return the upstream branch name, or an empty string if none."""
         return self._run(
             [
                 "git",
@@ -64,30 +51,21 @@ class GitOperator:
         )
 
     def is_ahead_of_remote(self, fetch: bool = False) -> bool:
-        """Return True if local HEAD has unpushed commits.
-
-        When ``fetch`` is True, refresh the upstream ref first — but only
-        do that when the caller is about to push. Skipping the fetch by
-        default avoids a network round-trip on every run and shrinks the
-        TOCTOU window between fetch and rev-list.
-        """
+        """Return True if local HEAD has commits that are not pushed."""
         upstream = self.upstream()
         if not upstream:
             return False
+
         if fetch:
-            try:
-                self._run(["git", "fetch", "origin", upstream], check=False)
-            except GitError:
-                pass
-        try:
-            count = self._run(["git", "rev-list", "--count", "@{u}..HEAD"], check=False)
-            return bool(count) and int(count) > 0
-        except (GitError, ValueError):
-            return False
+            # Best-effort refresh; push will fail loudly later if needed.
+            self._run(["git", "fetch", "origin", upstream], check=False)
+
+        count = self._run(["git", "rev-list", "--count", "@{u}..HEAD"], check=False)
+        return count.isdigit() and int(count) > 0
 
     def detect_changed(self) -> list[str]:
         """Return modified, deleted, and untracked files (deduplicated)."""
-        out = self._run(
+        output = self._run(
             [
                 "git",
                 "ls-files",
@@ -98,56 +76,34 @@ class GitOperator:
                 "--exclude-standard",
             ]
         )
-        files = {f for f in out.split("\0") if f}
-        staged_out = self._run(["git", "diff", "-z", "--name-only", "--cached"])
-        files.update(f for f in staged_out.split("\0") if f)
+        files = {name for name in output.split("\0") if name}
+
+        staged = self._run(["git", "diff", "-z", "--name-only", "--cached"])
+        files.update(name for name in staged.split("\0") if name)
         return sorted(files)
 
     # ------------------------------------------------------------------ actions
 
     def stage(self, files: list[str]) -> None:
-        """Stage the given paths — ``git add`` for existing files, ``git rm`` for deleted."""
-        if not files:
-            return
-        existing = [f for f in files if Path(self.cwd or ".").joinpath(f).exists()]
-        deleted = [f for f in files if f not in existing]
-        try:
-            if existing:
-                self._run(["git", "add", *existing])
-            if deleted:
-                self._run(["git", "rm", *deleted])
-        except GitError:
-            # Fallback: file state may have changed between check and command.
-            # Try a single git add --all for the whole set; git will handle
-            # both additions and removals correctly.
+        """Stage paths, including deletions, in a single git call."""
+        if files:
             self._run(["git", "add", "--all", "--", *files])
 
     def commit(self, message: str) -> None:
-        """``git commit -m`` with the given message."""
+        """Create a commit with the given message."""
         self._run(["git", "commit", "-m", message])
 
     def reset(self, files: list[str]) -> None:
-        """Unstage the given paths. Errors are swallowed — best-effort."""
-        if not files:
-            return
-        try:
+        """Unstage paths. Best-effort: failures are ignored."""
+        if files:
             self._run(["git", "reset", "HEAD", "--", *files], check=False)
-        except GitError:
-            pass
 
     def push(self) -> None:
-        """Fetch upstream then push. Falls back to a no-upstream warning."""
-        upstream = self.upstream()
-        if upstream:
-            try:
-                self._run(["git", "fetch", "origin", upstream], check=False)
-            except GitError:
-                pass
+        """Push the current branch, warning instead of failing without upstream."""
         try:
             self._run(["git", "push"])
-        except GitError as e:
-            if "no upstream branch" in str(e).lower():
-                if not self.quiet_commands:
-                    print("[warning]No upstream branch. Skipping push.[/warning]")
-                return
-            raise
+        except GitError as error:
+            if "no upstream branch" not in str(error).lower():
+                raise
+            if not self.quiet_commands:
+                self.logger.warning("No upstream branch. Skipping push.")

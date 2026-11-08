@@ -1,7 +1,6 @@
-from pathlib import Path
+from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
-import toml
 import typer
 
 from devgen.cli.changelog import app as changelog_app
@@ -22,51 +21,17 @@ app = typer.Typer(
 
 
 def _version_callback(value: bool) -> None:
-    """Displays the application version retrieved from pyproject.toml if the input value is True, then exits the program. If the version information cannot be found or the file is missing or malformed, outputs an error message before exiting.
+    """Print the installed package version and exit."""
+    if not value:
+        return
 
-    Args:
-        value (bool): A boolean flag indicating whether to display the version and exit.
+    try:
+        package_version = version("devgen-cli")
+    except PackageNotFoundError:
+        package_version = "unknown"
 
-    Returns:
-        None
-
-    Raises:
-        typer.Exit: Exits the program after attempting to display the version or an error message.
-    """
-    if value:
-        try:
-            pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
-            pyproject_data = toml.load(pyproject_path)
-            # Try standard PEP 621 first, then fallback
-            version = pyproject_data.get("project", {}).get("version")
-            if not version:
-                version = (
-                    pyproject_data.get("tool", {}).get("poetry", {}).get("version")
-                )
-
-            if version:
-                typer.echo(f"devgen version: {version}")
-            else:
-                typer.secho(
-                    "Could not determine version: no `project.version` or "
-                    "`tool.poetry.version` found in pyproject.toml.",
-                    fg=typer.colors.RED,
-                    err=True,
-                )
-        except FileNotFoundError:
-            typer.secho(
-                f"pyproject.toml not found at {pyproject_path}. "
-                "The installation may be corrupt.",
-                fg=typer.colors.RED,
-                err=True,
-            )
-        except toml.TomlDecodeError as e:
-            typer.secho(
-                f"pyproject.toml is not valid TOML: {e}",
-                fg=typer.colors.RED,
-                err=True,
-            )
-        raise typer.Exit()
+    typer.echo(f"devgen version: {package_version}")
+    raise typer.Exit()
 
 
 @app.callback()
@@ -82,15 +47,7 @@ def main_callback(
         ),
     ] = None,
 ) -> None:
-    """Displays the application version information when the --version or -v option is used. If the flag is set, shows the version and exits; otherwise, provides guidance on using other commands with devgen.
-
-    Args:
-        version (bool or None, optional): A flag indicating whether to display the application version, set via command-line options --version or -v. Defaults to None.
-
-    Returns:
-        None
-    """
-    pass
+    """DevGen command-line entry point."""
 
 
 app.add_typer(commit_app, name="commit")

@@ -1,18 +1,19 @@
 """Orchestrates the AI-powered commit flow.
 
-The :class:`CommitEngine` is a thin coordinator. The real work lives in:
+The :class:`CommitEngine` coordinates the pieces that do the real work:
 
-* :class:`devgen.modules.git_ops.GitOperator` — all git side-effects
-* :class:`devgen.modules.diff_builder.FileGrouper` — files → commit groups
+* :class:`devgen.modules.git_ops.GitOperator` — git side-effects
+* :class:`devgen.modules.diff_builder.FileGrouper` — files → groups
 * :class:`devgen.modules.diff_builder.DiffBuilder` — staged diff + truncation
 * :class:`devgen.modules.diff_builder.ManifestInspector` — project context
-* :class:`devgen.ai.generate_with_ai` — provider-agnostic AI call
+* :func:`devgen.ai.generate_with_ai` — provider-agnostic AI call
 """
 
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import questionary
 from rich.console import Console
@@ -30,110 +31,53 @@ from devgen.modules.diff_builder import (
 from devgen.modules.git_ops import GitOperator
 from devgen.utils import (
     configure_logger,
+    ensure_log_directory,
     extract_commit_messages,
+    format_token_limit_error,
     get_commit_dry_run_path,
     is_file_recent,
     is_token_limit_error,
-    format_token_limit_error,
+    load_config,
     load_template,
     render_template,
     sanitize_ai_commit_message,
 )
 
+# Constructor kwargs that select the model call; they must not be
+# forwarded to the provider SDK as generation parameters.
+_CONTROL_KWARGS = frozenset({"api_key"})
 
-class CommitEngineError(Exception):
-    """Raised when the commit flow cannot proceed."""
+# Conservative pause between groups for free-tier rate limits.
+_SECONDS_BETWEEN_GROUPS = 15
 
 
 class CacheManager:
-    """Manages the dry-run cache file at ``~/.cache/devgen/commit_dry_run.md``."""
+    """Reads and writes the dry-run cache at ``~/.cache/devgen/commit_dry_run.md``."""
 
     def __init__(self, path: Path, max_age_minutes: int = 120) -> None:
         self.path = path
         self.max_age_minutes = max_age_minutes
 
-    def init_dry_run(self) -> None:
+    def reset(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S (%Z)")
-        with self.path.open("w", encoding="utf-8") as f:
-            f.write(f"# Dry Run: Commit Messages\n_Generated: {ts}_\n\n")
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S (%Z)")
+        self.path.write_text(
+            f"# Dry Run: Commit Messages\n_Generated: {timestamp}_\n\n",
+            encoding="utf-8",
+        )
 
-    def load(self, *, dry_run: bool, force_rebuild: bool) -> Dict[str, str]:
-        if dry_run:
-            self.init_dry_run()
+    def load(self) -> dict[str, str]:
+        if not is_file_recent(self.path, self.max_age_minutes):
             return {}
-        if not force_rebuild and is_file_recent(self.path, self.max_age_minutes):
-            return extract_commit_messages(self.path)
-        return {}
+        return extract_commit_messages(self.path)
 
     def append(self, group: str, message: str) -> None:
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(f"## Group: `{group}`\n\n```md\n{message}\n```\n\n---\n\n")
-
-
-class CommitMessageBuilder:
-    """Renders the prompt and calls the AI provider."""
-
-    def __init__(
-        self,
-        template_str: str,
-        config: Dict[str, Any],
-        provider: str,
-        model: str,
-        debug: bool = False,
-    ) -> None:
-        self.template_str = template_str
-        self.config = config
-        self.provider = provider
-        self.model = model
-        self.debug = debug
-
-    def build_message(
-        self,
-        group: str,
-        diff: str,
-        manifest_context: str,
-        extra_kwargs: Dict[str, Any],
-    ) -> str:
-        custom_template = self.config.get("custom_template")
-        use_emoji = self.config.get("emoji", True)
-        ollama_host = self.config.get("ollama_host")
-
-        template = custom_template or self.template_str
-        prompt = render_template(
-            template,
-            group_name=group,
-            diff_text=diff,
-            use_emoji=use_emoji,
-            context=manifest_context,
-        ).strip()
-
-        provider = (
-            extra_kwargs.get("provider") or self.config.get("provider") or self.provider
-        )
-        model = extra_kwargs.get("model") or self.config.get("model") or self.model
-        api_key = extra_kwargs.get("api_key") or self.config.get("api_key")
-
-        call_kwargs = dict(extra_kwargs)
-        if ollama_host and provider == "ollama":
-            call_kwargs.setdefault("ollama_host", ollama_host)
-        return generate_with_ai(
-            prompt,
-            provider=provider,
-            model=model,
-            api_key=api_key,
-            debug=self.debug,
-            **call_kwargs,
-        )
+        with self.path.open("a", encoding="utf-8") as file:
+            file.write(f"## Group: `{group}`\n\n```md\n{message}\n```\n\n---\n\n")
 
 
 class CommitEngine:
-    """Coordinates the AI-powered commit flow.
-
-    The constructor signature is stable (used by ``cli/commit.py``) but
-    most logic now lives in composed objects. The public ``execute()``
-    method remains the single entry point.
-    """
+    """Coordinates the AI-powered commit flow."""
 
     def __init__(
         self,
@@ -142,8 +86,8 @@ class CommitEngine:
         debug: bool = False,
         force_rebuild: bool = False,
         check: bool = False,
-        provider: str = "gemini",
-        model: str = "gemini-2.5-flash",
+        provider: str | None = None,
+        model: str | None = None,
         logger: Any | None = None,
         max_groups: int | None = None,
         max_diff_size: int | None = None,
@@ -154,19 +98,17 @@ class CommitEngine:
         self.debug = debug
         self.force_rebuild = force_rebuild
         self.check = check
-        self.provider = provider
-        self.model = model
         self.logger = logger or configure_logger(
             "devgen.commit",
-            Path.home() / ".cache" / "devgen" / "commit.log",
+            ensure_log_directory() / "commit.log",
             console=debug,
         )
         self.kwargs = kwargs
 
-        # CLI flags win over config; config wins over default.
-        from devgen.utils import load_config
-
+        # Explicit constructor values win over config; config wins over defaults.
         self.config = load_config()
+        self.provider = provider or self.config.get("provider") or "gemini"
+        self.model = model or self.config.get("model") or "gemini-2.5-flash"
 
         self.console = Console(
             theme=Theme(
@@ -191,36 +133,25 @@ class CommitEngine:
         )
         self.template_str = load_template("commit", "commit_message.tpl")
         self.cache = CacheManager(get_commit_dry_run_path())
-        self.message_builder = CommitMessageBuilder(
-            self.template_str,
-            self.config,
-            provider=self.provider,
-            model=self.model,
-            debug=self.debug,
-        )
 
     # ------------------------------------------------------------------ public
 
-    def execute(self) -> None:
+    def execute(self) -> list[str]:
         files = self.git.detect_changed()
-        # Only consult the remote state if the user wants to push —
-        # avoids a network round-trip on every run.
-        ahead = self.git.is_ahead_of_remote(fetch=self.push) if self.push else False
+        ahead = self.push and self.git.is_ahead_of_remote(fetch=True)
 
         if not files and not ahead:
             self.logger.info("Nothing to commit or push.")
-            return
+            return []
 
-        failed: list[str] = []
-        if files:
-            failed = self._process_groups(files)
+        failed = self._process_groups(files) if files else []
 
         if self.push and not self.dry_run:
-            if not failed:
+            if failed:
+                self.logger.error("Push aborted due to failed commits.")
+            else:
                 self.git.push()
                 self.console.print("[bold green]Push successful.[/bold green]")
-            else:
-                self.logger.error("Push aborted due to failed commits.")
 
         if self.dry_run:
             self.console.print(
@@ -228,32 +159,36 @@ class CommitEngine:
             )
         else:
             self.console.print("[bold green]Done.[/bold green]")
-            if failed:
-                self.console.print(f"[bold red]Failed groups: {failed}[/bold red]")
+
+        if failed:
+            self.console.print(f"[bold red]Failed groups: {failed}[/bold red]")
+
+        return failed
 
     # ------------------------------------------------------------------ groups
 
-    def _process_groups(self, files: List[str]) -> list[str]:
-        groups = self.grouper.group(files)
-        cache_map = self.cache.load(
-            dry_run=self.dry_run, force_rebuild=self.force_rebuild
-        )
-        failed: list[str] = []
-        for i, (group, group_files) in enumerate(groups.items()):
-            if not self._process_group(group, group_files, cache_map):
-                failed.append(group)
-            if len(groups) > 1 and i < len(groups) - 1:
-                if self.provider != "ollama":
-                    import time
+    def _process_groups(self, files: list[str]) -> list[str]:
+        groups = list(self.grouper.group(files).items())
+        cached = {} if self.force_rebuild or self.dry_run else self.cache.load()
+        if self.dry_run:
+            self.cache.reset()
 
-                    time.sleep(15)  # Conservative 4 RPM guard for free-tier
+        failed: list[str] = []
+        for index, (group, group_files) in enumerate(groups):
+            if not self._process_group(group, group_files, cached):
+                failed.append(group)
+                continue
+
+            if self.provider != "ollama" and index < len(groups) - 1:
+                time.sleep(_SECONDS_BETWEEN_GROUPS)
+
         return failed
 
     def _process_group(
         self,
         group: str,
-        files: List[str],
-        cache: Dict[str, str],
+        files: list[str],
+        cached: dict[str, str],
     ) -> bool:
         self.git.stage(files)
         diff = self.diff_builder.build(files)
@@ -263,9 +198,9 @@ class CommitEngine:
             self.git.reset(files)
             return True
 
-        if not self.force_rebuild and group in cache:
+        if group in cached:
             self.logger.info(f"Using cached message for {group}")
-            return self._apply_message(group, cache[group], files)
+            return self._apply_message(group, cached[group], files)
 
         try:
             manifest_context = ManifestInspector.summary(cwd=self.git.cwd)
@@ -274,23 +209,10 @@ class CommitEngine:
             with self.console.status(
                 "[bold blue]Generating commit message...[/bold blue]"
             ):
-                raw = self.message_builder.build_message(
-                    group=group,
-                    diff=diff,
-                    manifest_context=manifest_context,
-                    extra_kwargs=self.kwargs,
-                )
+                raw = self._generate_message(group, diff, manifest_context)
             message = sanitize_ai_commit_message(raw)
-        except Exception as e:
-            if is_token_limit_error(e):
-                msg = format_token_limit_error(self.provider, e, group=group)
-                self.console.print(f"[bold red]{msg}[/bold red]")
-                self.logger.error(msg)
-            else:
-                self.logger.error(
-                    f"Failed to generate message for group {group!r}: {e}",
-                    exc_info=True,
-                )
+        except Exception as error:  # noqa: BLE001 - isolate provider failures per group
+            self._report_generation_error(group, error)
             self.git.reset(files)
             return False
 
@@ -301,11 +223,51 @@ class CommitEngine:
 
         return self._apply_message(group, message, files)
 
+    def _generate_message(self, group: str, diff: str, context: str) -> str:
+        template = self.config.get("custom_template") or self.template_str
+        prompt = render_template(
+            template,
+            group_name=group,
+            diff_text=diff,
+            use_emoji=self.config.get("emoji", True),
+            context=context,
+        ).strip()
+
+        api_key = self.kwargs.get("api_key") or self.config.get("api_key")
+
+        call_kwargs = {
+            key: value
+            for key, value in self.kwargs.items()
+            if key not in _CONTROL_KWARGS
+        }
+        if self.provider == "ollama" and self.config.get("ollama_host"):
+            call_kwargs.setdefault("ollama_host", self.config["ollama_host"])
+
+        return generate_with_ai(
+            prompt,
+            provider=self.provider,
+            model=self.model,
+            api_key=api_key,
+            debug=self.debug,
+            **call_kwargs,
+        )
+
+    def _report_generation_error(self, group: str, error: Exception) -> None:
+        if is_token_limit_error(error):
+            message = format_token_limit_error(self.provider, error, group=group)
+            self.console.print(f"[bold red]{message}[/bold red]")
+            self.logger.error(message)
+            return
+
+        self.logger.exception(
+            f"Failed to generate message for group {group!r}: {error}",
+        )
+
     def _apply_message(
         self,
         group: str,
         message: str,
-        files: List[str],
+        files: list[str],
     ) -> bool:
         if self.dry_run:
             self.console.print(
@@ -330,8 +292,8 @@ class CommitEngine:
                 Panel(Markdown(message), title="Commit Message", border_style="green")
             )
             self.git.commit(message)
-        except Exception as e:
-            self.logger.error(f"Failed to process group {group}: {e}", exc_info=True)
+        except Exception:
+            self.logger.exception(f"Failed to process group {group}")
             self.git.reset(files)
             return False
         return True
@@ -340,8 +302,8 @@ class CommitEngine:
         self,
         group: str,
         message: str,
-        files: List[str],
-    ) -> Optional[str]:
+        files: list[str],
+    ) -> str | None:
         """Present the message; return the final message, or None to abort."""
         self.console.print(
             Panel(
@@ -360,6 +322,7 @@ class CommitEngine:
             self.logger.info(f"Commit aborted by user at group {group}")
             self.git.reset(files)
             return None
+
         if choice == "Edit":
             edited = questionary.text(
                 "Edit commit message:",
@@ -371,21 +334,27 @@ class CommitEngine:
                 self.git.reset(files)
                 return None
             return edited
+
         return message
 
 
 def run_commit_engine(**kwargs: Any) -> None:
     """Entry point used by the CLI."""
-    debug = kwargs.get("debug", False)
-    logger = configure_logger("devgen.cli.commit", console=debug)
+    logger = kwargs.pop("logger", None) or configure_logger(
+        "devgen.cli.commit",
+        console=kwargs.get("debug", False),
+    )
     try:
-        CommitEngine(**kwargs).execute()
+        failed = CommitEngine(logger=logger, **kwargs).execute()
     except KeyboardInterrupt:
         logger.warning("Interrupted by user. Exiting...")
-        sys.exit(0)
-    except Exception as e:
-        logger.error(f"Commit engine failed: {e}", exc_info=True)
+        sys.exit(130)
+    except Exception:
+        logger.exception("Commit engine failed")
+        sys.exit(1)
+
+    if failed:
         sys.exit(1)
 
 
-__all__ = ["CommitEngine", "CommitEngineError", "run_commit_engine"]
+__all__ = ["CommitEngine", "run_commit_engine"]

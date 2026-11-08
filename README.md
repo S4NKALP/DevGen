@@ -28,7 +28,7 @@ DevGen is a CLI for the parts of development that should be invisible. It writes
 - **Conventional Changelogs** — `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, `chore`, `style`, and a `BREAKING CHANGES` section.
 - **Project Scaffolding** — Pull `.gitignore` from GitHub's collection and drop in SPDX license files (MIT, Apache-2.0, GPL-3.0, AGPL-3.0, BSD, MPL-2.0, …).
 - **Custom Templates** — Override the commit-message prompt via a `.tpl` file in your config.
-- **Interactive Setup** — `devgen setup` walks you through provider + API key + options.
+- **Interactive Setup** — `devgen setup config` walks you through provider + API key + options.
 - **Undo Support** — `devgen commit undo` rolls back the last AI commit while keeping changes staged.
 - **Token-Limit Aware** — When a diff exceeds a model's context window, you get a single actionable error with `--max-groups` and `--max-diff-size` hints.
 
@@ -83,14 +83,16 @@ devgen commit run --push
 | Command                         | Description                                                                   |
 | ------------------------------- | ----------------------------------------------------------------------------- |
 | `devgen setup config`           | Interactive provider / API key / options wizard                               |
+| `devgen config set`             | Same wizard, available under `config`                                         |
+| `devgen config list`            | Print the current configuration                                               |
+| `devgen config edit <key> [v]`  | Update a single configuration value                                           |
 | `devgen commit run`             | Stage, generate message, commit (optionally `--push`, `--check`, `--dry-run`) |
 | `devgen commit undo`            | Undo the last AI commit, keep changes staged                                  |
-| `devgen changelog`              | Generate a Conventional Commits changelog from recent history                 |
-| `devgen release-notes`          | Generate release notes for a version range                                    |
+| `devgen changelog generate`     | Generate a Conventional Commits changelog from recent history                 |
+| `devgen release notes`          | Generate release notes for a version range                                    |
 | `devgen gitignore list`         | List available GitHub `.gitignore` templates                                  |
-| `devgen gitignore add <name> …` | Add `.gitignore` entries to the current project                               |
-| `devgen license list`           | List available SPDX licenses                                                  |
-| `devgen license add <spdx>`     | Add a LICENSE file to the current project                                     |
+| `devgen gitignore generate …`   | Add `.gitignore` entries to the current project                               |
+| `devgen license generate`       | Interactively add a LICENSE file to the current project                       |
 
 Run `devgen <command> --help` for full options on any subcommand.
 

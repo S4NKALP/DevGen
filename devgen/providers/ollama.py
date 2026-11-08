@@ -1,55 +1,30 @@
+from typing import Any
+
 from openai import OpenAI
 
-from devgen.providers.base import BaseProvider
-from devgen.utils import format_token_limit_error, is_token_limit_error
+from devgen.providers.openai_compatible import OpenAICompatibleProvider
 
 
-class OllamaProvider(BaseProvider):
+class OllamaProvider(OpenAICompatibleProvider):
     """Generates content using a local Ollama server.
 
-    Ollama exposes an OpenAI-compatible endpoint at /v1/chat/completions,
-    so we reuse the ``openai`` client. The host defaults to
-    http://localhost:11434 but can be overridden via the ``ollama_host``
-    kwarg (or ``ollama_host`` in ~/.devgen.yaml).
+    Ollama exposes an OpenAI-compatible endpoint at ``/v1``, so the
+    ``openai`` client is reused. The host defaults to
+    ``http://localhost:11434`` and can be overridden with ``ollama_host``.
     """
 
     DISPLAY_NAME = "Ollama"
     REQUIRES_API_KEY = False
     DEFAULT_HOST = "http://localhost:11434"
     DEFAULT_MODEL = "llama3.2"
+    ERROR_HINT = (
+        "Is the Ollama server running? Start it with `ollama serve` and "
+        "pull a model with `ollama pull <model>`."
+    )
 
-    # Keys consumed by devgen itself — never forwarded to the SDK.
-    _DEVGEN_KEYS = frozenset({"debug", "ollama_host", "max_retries", "retry_delay"})
-
-    def _generate(self, prompt, api_key, model, **kwargs):
+    def _client(self, api_key: str | None, **kwargs: Any) -> OpenAI:
         host = kwargs.get("ollama_host") or self.DEFAULT_HOST
-        base_url = f"{host.rstrip('/')}/v1"
-
-        # Only forward known OpenAI-compatible parameters
-        safe_kwargs = {k: v for k, v in kwargs.items() if k not in self._DEVGEN_KEYS}
-
-        with OpenAI(base_url=base_url, api_key=api_key or "ollama") as client:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                **safe_kwargs,
-            )
-
-        if not response.choices:
-            raise RuntimeError(
-                f"Ollama returned no choices for model {model!r}. "
-                "The model may not be installed locally."
-            )
-        return response.choices[0].message.content or ""
-
-    def _handle_error(self, error):
-        """Override default wrapping — Ollama has no API key to check."""
-        if is_token_limit_error(error):
-            raise RuntimeError(
-                format_token_limit_error(self.DISPLAY_NAME, error)
-            ) from error
-        raise RuntimeError(
-            f"{self.DISPLAY_NAME} request failed: {error}. "
-            "Is the Ollama server running? Start it with `ollama serve` and "
-            "pull a model with `ollama pull <model>`."
-        ) from error
+        return OpenAI(
+            base_url=f"{host.rstrip('/')}/v1",
+            api_key=api_key or "ollama",
+        )

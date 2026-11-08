@@ -1,5 +1,7 @@
+import subprocess
+from typing import Annotated
+
 import typer
-from typing_extensions import Annotated
 
 from devgen.modules.release_note_generator import ReleaseNotesGenerator
 
@@ -25,6 +27,13 @@ def generate_release_notes(
         str,
         typer.Option("--from", "-f", help="Start reference. Defaults to last tag."),
     ] = "",
-):
-    generator = ReleaseNotesGenerator()
-    generator.run(output_file=output, version=version, from_ref=from_ref)
+) -> None:
+    try:
+        ReleaseNotesGenerator().run(
+            output_file=output,
+            version=version,
+            from_ref=from_ref,
+        )
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        typer.secho(f"Error generating release notes: {error}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
