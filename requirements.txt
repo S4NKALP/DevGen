@@ -8,4 +8,4 @@ requests==2.34.2
 rich==15.0.0
 ruff==0.15.20
 toml==0.10.2
-typer==0.26.8
+typer==0.29.0
